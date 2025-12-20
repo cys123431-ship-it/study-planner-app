@@ -32,6 +32,30 @@ with st.sidebar:
     if new_theme != st.session_state.theme:
         st.session_state.theme = new_theme
         st.rerun()
+    
+    st.markdown("---")
+    st.markdown("### 📤 데이터 관리")
+    
+    # 데이터 내보내기
+    import json
+    if st.button("📥 데이터 백업 (JSON)", use_container_width=True):
+        export_data = {
+            "monthly_goals": st.session_state.monthly_goals.to_dict('records'),
+            "weekly_tasks": st.session_state.weekly_tasks.to_dict('records'),
+            "study_sessions": st.session_state.study_sessions.to_dict('records'),
+            "project_data": st.session_state.project_data.to_dict('records'),
+            "habits": st.session_state.habits.to_dict('records'),
+            "habit_logs": st.session_state.habit_logs,
+            "daily_memo": st.session_state.daily_memo
+        }
+        json_str = json.dumps(export_data, ensure_ascii=False, indent=2)
+        st.download_button(
+            "⬇️ 다운로드",
+            json_str,
+            file_name="navigators_backup.json",
+            mime="application/json",
+            use_container_width=True
+        )
 
 # 테마 팔레트 정의 (예시 이미지 기반)
 THEMES = {
@@ -298,6 +322,23 @@ if 'project_data' not in st.session_state:
 if 'daily_memo' not in st.session_state:
     st.session_state.daily_memo = ""
 
+# 습관 트래커 데이터
+if 'habits' not in st.session_state:
+    st.session_state.habits = pd.DataFrame([
+        {"Name": "아침 운동", "Icon": "🏃", "Target": 7},  # 주 7회 목표
+        {"Name": "독서 30분", "Icon": "📚", "Target": 5},
+        {"Name": "물 2L 마시기", "Icon": "💧", "Target": 7}
+    ])
+
+if 'habit_logs' not in st.session_state:
+    # 오늘 날짜 기준 최근 7일 로그
+    from datetime import datetime, timedelta
+    today = datetime.now().date()
+    st.session_state.habit_logs = {}  # {habit_name: [날짜 리스트]}
+    st.session_state.habit_logs["아침 운동"] = [str(today - timedelta(days=i)) for i in [1, 2, 4, 5]]
+    st.session_state.habit_logs["독서 30분"] = [str(today - timedelta(days=i)) for i in [0, 1, 3]]
+    st.session_state.habit_logs["물 2L 마시기"] = [str(today - timedelta(days=i)) for i in [0, 1, 2, 3, 4, 5, 6]]
+
 # ---------------------------------------------------------
 # 4. 차트 생성 함수 (대시보드용)
 # ---------------------------------------------------------
@@ -339,7 +380,7 @@ def draw_bar_chart(df, x_col, y_col, title):
 # ---------------------------------------------------------
 # 사이드바 대신 상단 네비게이션 (모바일 친화적)
 st.markdown("<h2 style='text-align:center; margin-bottom:10px;'>🧭 Navigators</h2>", unsafe_allow_html=True)
-menu = st.tabs(["📊 대시보드", "📚 학기", "📅 월간", "📆 주간", "📝 데일리", "📖 스터디", "💼 프로젝트"])
+menu = st.tabs(["📊 대시보드", "📚 학기", "📅 월간", "📆 주간", "📝 데일리", "📖 스터디", "💼 프로젝트", "🎯 습관"])
 
 # === [1] 대시보드 (통합 그래프) ===
 with menu[0]:
@@ -406,6 +447,18 @@ with menu[0]:
         p_done = p_df['Done'].sum() if 'Done' in p_df.columns else 0
         p_total = p_df['Total'].sum() if 'Total' in p_df.columns else len(p_df)
         st.plotly_chart(draw_pie_chart(int(p_done), int(p_total), "Project"), use_container_width=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+    
+    # 7. 습관 트래커 (진행률 표시)
+    row4_c1, row4_c2 = st.columns(2)
+    with row4_c1:
+        st.markdown(f"<div class='metric-card'><div style='text-align:center; margin-bottom:5px'>🎯 습관</div>", unsafe_allow_html=True)
+        from datetime import datetime, timedelta
+        today_date = datetime.now().date()
+        total_habits = len(st.session_state.habits)
+        today_done = sum(1 for _, h in st.session_state.habits.iterrows() 
+                        if str(today_date) in st.session_state.habit_logs.get(h['Name'], []))
+        st.plotly_chart(draw_pie_chart(today_done, total_habits if total_habits > 0 else 1, "Habit"), use_container_width=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
 # === [2] 학기 관리 ===
@@ -604,3 +657,83 @@ with menu[6]:
             
             st.progress(pct / 100)
             st.caption(f"📅 마감: {row['Deadline']}")
+
+# === [8] 습관 트래커 ===
+with menu[7]:
+    st.markdown("### 🎯 Habit Tracker")
+    
+    from datetime import datetime, timedelta
+    today = str(datetime.now().date())
+    
+    col_t1, col_t2 = st.columns(2)
+    show_add = col_t1.toggle("➕ 추가", key="h_add_t")
+    show_manage = col_t2.toggle("⚙️ 관리", key="h_man_t")
+    
+    if show_add:
+        with st.container(border=True):
+            icons = ["🏃", "📚", "💧", "🧘", "✍️", "🎵", "💪", "🥗", "😴", "🎯"]
+            h_icon = st.selectbox("아이콘", icons)
+            h_name = st.text_input("습관 이름")
+            h_target = st.number_input("주간 목표 (회)", min_value=1, max_value=7, value=7)
+            if st.button("추가하기", use_container_width=True, key="h_save"):
+                if h_name:
+                    st.session_state.habits = pd.concat([st.session_state.habits, pd.DataFrame([{"Name": h_name, "Icon": h_icon, "Target": int(h_target)}])], ignore_index=True)
+                    st.session_state.habit_logs[h_name] = []
+                    st.rerun()
+    
+    if show_manage:
+        for i, row in st.session_state.habits.iterrows():
+            c1, c2 = st.columns([3, 1])
+            c1.markdown(f"{row['Icon']} **{row['Name']}**")
+            if c2.button("삭제", key=f"h_del_{i}"):
+                habit_name = row['Name']
+                st.session_state.habits = st.session_state.habits.drop(i).reset_index(drop=True)
+                if habit_name in st.session_state.habit_logs:
+                    del st.session_state.habit_logs[habit_name]
+                st.rerun()
+    else:
+        # 습관별 체크인 UI
+        for i, row in st.session_state.habits.iterrows():
+            habit_name = row['Name']
+            logs = st.session_state.habit_logs.get(habit_name, [])
+            
+            # 이번 주 완료 횟수 계산
+            week_start = datetime.now().date() - timedelta(days=datetime.now().weekday())
+            week_logs = [d for d in logs if d >= str(week_start)]
+            week_count = len(week_logs)
+            target = int(row['Target'])
+            pct = min(100, int(week_count / target * 100))
+            
+            # 오늘 체크 여부
+            checked_today = today in logs
+            
+            st.markdown(f"---")
+            col1, col2, col3 = st.columns([3, 2, 1])
+            
+            col1.markdown(f"### {row['Icon']} {habit_name}")
+            col2.markdown(f"<span style='color:{T['accent']}; font-size:1.2rem;'>{week_count}/{target} 이번 주</span>", unsafe_allow_html=True)
+            
+            if checked_today:
+                col3.success("✅ 완료!")
+            else:
+                if col3.button("체크인", key=f"h_check_{i}"):
+                    if today not in st.session_state.habit_logs.get(habit_name, []):
+                        if habit_name not in st.session_state.habit_logs:
+                            st.session_state.habit_logs[habit_name] = []
+                        st.session_state.habit_logs[habit_name].append(today)
+                        st.rerun()
+            
+            # 스트릭 (최근 7일 표시)
+            streak_cols = st.columns(7)
+            for d in range(6, -1, -1):
+                day = datetime.now().date() - timedelta(days=d)
+                day_str = str(day)
+                day_name = ["월", "화", "수", "목", "금", "토", "일"][day.weekday()]
+                is_done = day_str in logs
+                with streak_cols[6-d]:
+                    if is_done:
+                        st.markdown(f"<div style='text-align:center; background:{T['accent']}; color:white; padding:8px; border-radius:8px;'><b>{day_name}</b><br>✓</div>", unsafe_allow_html=True)
+                    else:
+                        st.markdown(f"<div style='text-align:center; background:{'#1e293b' if is_dark else '#e2e8f0'}; padding:8px; border-radius:8px;'><b>{day_name}</b><br>-</div>", unsafe_allow_html=True)
+            
+            st.progress(pct / 100)
