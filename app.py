@@ -291,8 +291,8 @@ if 'study_sessions' not in st.session_state:
 
 if 'project_data' not in st.session_state:
     st.session_state.project_data = pd.DataFrame([
-        {"Subject": "캡스톤1", "Task": "기획안", "Done": True, "Deadline": "2026-03-15"},
-        {"Subject": "자료구조", "Task": "연결리스트", "Done": False, "Deadline": "2026-03-20"}
+        {"Subject": "캡스톤1", "Task": "기획안", "Total": 5, "Done": 5, "Deadline": "2026-03-15"},
+        {"Subject": "자료구조", "Task": "연결리스트", "Total": 8, "Done": 2, "Deadline": "2026-03-20"}
     ])
 
 if 'daily_memo' not in st.session_state:
@@ -339,7 +339,7 @@ def draw_bar_chart(df, x_col, y_col, title):
 # ---------------------------------------------------------
 # 사이드바 대신 상단 네비게이션 (모바일 친화적)
 st.markdown("<h2 style='text-align:center; margin-bottom:10px;'>🧭 Navigators</h2>", unsafe_allow_html=True)
-menu = st.tabs(["📊 대시보드", "📚 학기", "📅 월간", "📆 주간", "📝 데일리", "👥 스터디", "💼 프로젝트"])
+menu = st.tabs(["📊 대시보드", "📚 학기", "📅 월간", "📆 주간", "📝 데일리", "📖 스터디", "💼 프로젝트"])
 
 # === [1] 대시보드 (통합 그래프) ===
 with menu[0]:
@@ -391,7 +391,7 @@ with menu[0]:
     
     # 5. 스터디 (Bar Chart)
     with row3_c1:
-        st.markdown(f"<div class='metric-card'><div style='text-align:center; margin-bottom:5px'>👥 스터디</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='metric-card'><div style='text-align:center; margin-bottom:5px'>📖 스터디</div>", unsafe_allow_html=True)
         s_df = st.session_state.study_sessions
         fig = px.bar(s_df, x='Name', y='Done', range_y=[0, 15])
         fig.update_layout(showlegend=False, margin=dict(t=0,b=0,l=0,r=0), height=120, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color='white'), xaxis=dict(showticklabels=False))
@@ -403,7 +403,9 @@ with menu[0]:
     with row3_c2:
         st.markdown(f"<div class='metric-card'><div style='text-align:center; margin-bottom:5px'>💼 프로젝트</div>", unsafe_allow_html=True)
         p_df = st.session_state.project_data
-        st.plotly_chart(draw_pie_chart(len(p_df[p_df['Done']]), len(p_df), "Project"), use_container_width=True)
+        p_done = p_df['Done'].sum() if 'Done' in p_df.columns else 0
+        p_total = p_df['Total'].sum() if 'Total' in p_df.columns else len(p_df)
+        st.plotly_chart(draw_pie_chart(int(p_done), int(p_total), "Project"), use_container_width=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
 # === [2] 학기 관리 ===
@@ -442,9 +444,12 @@ with menu[2]:
                 st.session_state.monthly_goals = st.session_state.monthly_goals.drop(i).reset_index(drop=True)
                 st.rerun()
     else:
-        # 일반 보기 모드
+        # 일반 보기 모드 - 체크박스로 완료 토글
         for i, row in st.session_state.monthly_goals.iterrows():
-            st.markdown(f"<div class='metric-card' style='padding:10px; display:flex; align-items:center;'><span style='font-size:1.1rem; margin-right:10px;'>{'✅' if row['Done'] else '⬜'}</span> {row['Goal']}</div>", unsafe_allow_html=True)
+            done = st.checkbox(f"🎯 {row['Goal']}", value=row['Done'], key=f"m_chk_{i}")
+            if done != row['Done']:
+                st.session_state.monthly_goals.at[i, 'Done'] = done
+                st.rerun()
 
 # === [4] 주간 관리 ===
 with menu[3]:
@@ -470,9 +475,12 @@ with menu[3]:
                 st.session_state.weekly_tasks = st.session_state.weekly_tasks.drop(i).reset_index(drop=True)
                 st.rerun()
     else:
-        # 일반 보기 모드 (카드 스타일)
+        # 일반 보기 모드 - 체크박스로 완료 토글
         for i, row in st.session_state.weekly_tasks.iterrows():
-            st.markdown(f"<div class='metric-card' style='padding:12px; display:flex; align-items:center; justify-content:space-between;'><span style='font-size:1.1rem;'>{'✅' if row['Done'] else '⬜'} <b>{row['Day']}</b> : {row['Task']}</span></div>", unsafe_allow_html=True)
+            done = st.checkbox(f"📅 {row['Day']} : {row['Task']}", value=row['Done'], key=f"w_chk_{i}")
+            if done != row['Done']:
+                st.session_state.weekly_tasks.at[i, 'Done'] = done
+                st.rerun()
 
 # === [5] 데일리 ===
 with menu[4]:
@@ -508,7 +516,7 @@ with menu[4]:
 
 # === [6] 스터디 ===
 with menu[5]:
-    st.markdown("### 👥 Study Groups")
+    st.markdown("### 📖 스터디 플랜")
     col_t1, col_t2 = st.columns(2)
     show_add = col_t1.toggle("➕ 추가", key="s_add_t")
     show_manage = col_t2.toggle("⚙️ 관리", key="s_man_t")
@@ -516,8 +524,9 @@ with menu[5]:
     if show_add:
         with st.container(border=True):
             n = st.text_input("스터디 이름")
+            t = st.number_input("목표 횟수", min_value=1, max_value=100, value=10)
             if st.button("생성하기", use_container_width=True):
-                st.session_state.study_sessions = pd.concat([st.session_state.study_sessions, pd.DataFrame([{"Name":n, "Total":10, "Done":0}])], ignore_index=True)
+                st.session_state.study_sessions = pd.concat([st.session_state.study_sessions, pd.DataFrame([{"Name":n, "Total":int(t), "Done":0}])], ignore_index=True)
                 st.rerun()
                 
     if show_manage:
@@ -528,18 +537,25 @@ with menu[5]:
                 st.session_state.study_sessions = st.session_state.study_sessions.drop(i).reset_index(drop=True)
                 st.rerun()
     else:
-        # 일반 보기 모드 (카드 스타일 + 진행률 바)
+        # 일반 보기 모드 - 진행률 조절 가능
         for i, row in st.session_state.study_sessions.iterrows():
             pct = int(row['Done']/row['Total']*100) if row['Total'] > 0 else 0
-            st.markdown(f"""<div class='metric-card' style='padding:20px;'>
-                <div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;'>
-                    <span style='font-size:1.15rem; font-weight:700;'>📖 {row['Name']}</span>
-                    <span style='font-size:0.95rem; color:{T['accent']}; font-weight:600;'>{row['Done']}/{row['Total']} ({pct}%)</span>
-                </div>
-                <div style='background:{"rgba(10,20,40,0.8)" if is_dark else "#e2e8f0"}; height:12px; border-radius:8px; overflow:hidden;'>
-                    <div style='background:{T['accent']}; height:100%; border-radius:8px; width:{pct}%;'></div>
-                </div>
-            </div>""", unsafe_allow_html=True)
+            
+            col1, col2, col3, col4 = st.columns([4, 2, 1, 1])
+            col1.markdown(f"**📖 {row['Name']}**")
+            col2.markdown(f"<span style='color:{T['accent']}; font-weight:600;'>{int(row['Done'])}/{int(row['Total'])} ({pct}%)</span>", unsafe_allow_html=True)
+            
+            if col3.button("➖", key=f"s_minus_{i}"):
+                if st.session_state.study_sessions.at[i, 'Done'] > 0:
+                    st.session_state.study_sessions.at[i, 'Done'] -= 1
+                    st.rerun()
+            
+            if col4.button("➕", key=f"s_plus_{i}"):
+                if st.session_state.study_sessions.at[i, 'Done'] < row['Total']:
+                    st.session_state.study_sessions.at[i, 'Done'] += 1
+                    st.rerun()
+            
+            st.progress(pct / 100)
 
 # === [7] 프로젝트 ===
 with menu[6]:
@@ -550,10 +566,12 @@ with menu[6]:
     
     if show_add:
         with st.container(border=True):
-            s = st.text_input("과목명")
-            t = st.text_input("할일")
+            s = st.text_input("프로젝트명")
+            t = st.text_input("세부 작업")
+            total = st.number_input("목표 단계", min_value=1, max_value=50, value=5)
+            d = st.date_input("마감일")
             if st.button("추가하기", use_container_width=True):
-                st.session_state.project_data = pd.concat([st.session_state.project_data, pd.DataFrame([{"Subject":s, "Task":t, "Done":False, "Deadline":"2026-03-20"}])], ignore_index=True)
+                st.session_state.project_data = pd.concat([st.session_state.project_data, pd.DataFrame([{"Subject":s, "Task":t, "Total":int(total), "Done":0, "Deadline":str(d)}])], ignore_index=True)
                 st.rerun()
                 
     if show_manage:
@@ -564,8 +582,25 @@ with menu[6]:
                 st.session_state.project_data = st.session_state.project_data.drop(i).reset_index(drop=True)
                 st.rerun()
     else:
-        # 일반 보기 모드 (카드 스타일)
+        # 일반 보기 모드 - 진행률 조절 가능
         for i, row in st.session_state.project_data.iterrows():
-            icon = '✅' if row['Done'] else '📋'
-            deco = 'text-decoration:line-through; opacity:0.6;' if row['Done'] else ''
-            st.markdown(f"<div class='metric-card' style='padding:12px;'><div style='display:flex; justify-content:space-between; align-items:center; {deco}'><span style='font-size:1.1rem;'>{icon} <b>{row['Subject']}</b> : {row['Task']}</span><span style='font-size:0.85rem; color:#a0a0b0;'>📅 {row['Deadline']}</span></div></div>", unsafe_allow_html=True)
+            total = int(row['Total']) if 'Total' in row else 1
+            done = int(row['Done']) if isinstance(row['Done'], (int, float)) else (1 if row['Done'] else 0)
+            pct = int(done/total*100) if total > 0 else 0
+            
+            col1, col2, col3, col4 = st.columns([4, 2, 1, 1])
+            col1.markdown(f"**💼 {row['Subject']}** : {row['Task']}")
+            col2.markdown(f"<span style='color:{T['accent']}; font-weight:600;'>{done}/{total} ({pct}%)</span>", unsafe_allow_html=True)
+            
+            if col3.button("➖", key=f"p_minus_{i}"):
+                if st.session_state.project_data.at[i, 'Done'] > 0:
+                    st.session_state.project_data.at[i, 'Done'] -= 1
+                    st.rerun()
+            
+            if col4.button("➕", key=f"p_plus_{i}"):
+                if st.session_state.project_data.at[i, 'Done'] < total:
+                    st.session_state.project_data.at[i, 'Done'] += 1
+                    st.rerun()
+            
+            st.progress(pct / 100)
+            st.caption(f"📅 마감: {row['Deadline']}")
