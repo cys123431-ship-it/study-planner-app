@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # ---------------------------------------------------------
 # 1. 페이지 설정
@@ -430,14 +430,13 @@ with menu[0]:
         
     row3_c1, row3_c2 = st.columns(2)
     
-    # 5. 스터디 (Bar Chart)
+    # 5. 스터디 (Pie Chart - 총 진행률)
     with row3_c1:
         st.markdown(f"<div class='metric-card'><div style='text-align:center; margin-bottom:5px'>📖 스터디</div>", unsafe_allow_html=True)
         s_df = st.session_state.study_sessions
-        fig = px.bar(s_df, x='Name', y='Done', range_y=[0, 15])
-        fig.update_layout(showlegend=False, margin=dict(t=0,b=0,l=0,r=0), height=120, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color='white'), xaxis=dict(showticklabels=False))
-        fig.update_traces(marker_color=PURPLE_BTN)
-        st.plotly_chart(fig, use_container_width=True)
+        s_done = s_df['Done'].sum() if 'Done' in s_df.columns else 0
+        s_total = s_df['Total'].sum() if 'Total' in s_df.columns else 1
+        st.plotly_chart(draw_pie_chart(int(s_done), int(s_total), "Study"), use_container_width=True)
         st.markdown("</div>", unsafe_allow_html=True)
         
     # 6. 프로젝트 (Pie Chart)
@@ -453,7 +452,6 @@ with menu[0]:
     row4_c1, row4_c2 = st.columns(2)
     with row4_c1:
         st.markdown(f"<div class='metric-card'><div style='text-align:center; margin-bottom:5px'>🎯 습관</div>", unsafe_allow_html=True)
-        from datetime import datetime, timedelta
         today_date = datetime.now().date()
         total_habits = len(st.session_state.habits)
         today_done = sum(1 for _, h in st.session_state.habits.iterrows() 
@@ -468,7 +466,10 @@ with menu[1]:
         with st.expander(sem, expanded=True):
             cols = st.columns(2)
             for i, (sub, done) in enumerate(subjects.items()):
-                st.session_state.semester_progress[sem][sub] = cols[i%2].checkbox(sub, value=done)
+                checked = cols[i%2].checkbox(sub, value=done, key=f"sem_{sem}_{sub}")
+                if checked != done:
+                    st.session_state.semester_progress[sem][sub] = checked
+                    st.rerun()
 
 # === [3] 월간 관리 ===
 with menu[2]:
@@ -662,7 +663,6 @@ with menu[6]:
 with menu[7]:
     st.markdown("### 🎯 Habit Tracker")
     
-    from datetime import datetime, timedelta
     today = str(datetime.now().date())
     
     col_t1, col_t2 = st.columns(2)
@@ -697,12 +697,12 @@ with menu[7]:
             habit_name = row['Name']
             logs = st.session_state.habit_logs.get(habit_name, [])
             
-            # 이번 주 완료 횟수 계산
-            week_start = datetime.now().date() - timedelta(days=datetime.now().weekday())
-            week_logs = [d for d in logs if d >= str(week_start)]
-            week_count = len(week_logs)
+            # 최근 7일 완료 횟수 계산 (스트릭 표시와 일치)
+            seven_days_ago = datetime.now().date() - timedelta(days=6)
+            recent_logs = [d for d in logs if d >= str(seven_days_ago)]
+            done_count = len(recent_logs)
             target = int(row['Target'])
-            pct = min(100, int(week_count / target * 100))
+            pct = min(100, int(done_count / target * 100))
             
             # 오늘 체크 여부
             checked_today = today in logs
@@ -711,19 +711,49 @@ with menu[7]:
             col1, col2, col3 = st.columns([3, 2, 1])
             
             col1.markdown(f"### {row['Icon']} {habit_name}")
-            col2.markdown(f"<span style='color:{T['accent']}; font-size:1.2rem;'>{week_count}/{target} 이번 주</span>", unsafe_allow_html=True)
+            col2.markdown(f"<span style='color:{T['accent']}; font-size:1.2rem;'>{done_count}/{target} 최근 7일</span>", unsafe_allow_html=True)
             
-            if checked_today:
-                col3.success("✅ 완료!")
-            else:
-                if col3.button("체크인", key=f"h_check_{i}"):
-                    if today not in st.session_state.habit_logs.get(habit_name, []):
-                        if habit_name not in st.session_state.habit_logs:
-                            st.session_state.habit_logs[habit_name] = []
+            # 체크인 버튼 (토글 가능)
+            # 완료(Red)는 secondary 타입 + CSS, 미완료(SkyBlue)는 primary 타입
+            btn_label = "✅ 완료" if checked_today else "체크인"
+            
+            # 색상 제어를 위한 글로벌 CSS (한 번만 선언해도 되지만 구조상 여기 유지)
+            st.markdown(f"""
+                <style>
+                /* [미완료/하늘색] Primary 버튼 스타일 덮어쓰기 */
+                div.stButton > button[kind="primary"] {{
+                    background-color: {T['accent']} !important;
+                    color: white !important;
+                    border: none !important;
+                    box-shadow: 0 4px 15px rgba(56, 189, 248, 0.3) !important;
+                }}
+                /* [완료/빨간색] Secondary 버튼 스타일 덮어쓰기 */
+                div.stButton > button[kind="secondary"] {{
+                    background-color: #FF4B4B !important;
+                    color: white !important;
+                    border: none !important;
+                    box-shadow: 0 4px 15px rgba(255, 75, 75, 0.3) !important;
+                }}
+                /* 호버 효과 */
+                div.stButton > button:hover {{
+                    opacity: 0.8 !important;
+                    transform: translateY(-1px) !important;
+                }}
+                </style>
+            """, unsafe_allow_html=True)
+
+            if col3.button(btn_label, key=f"h_check_{i}", type="secondary" if checked_today else "primary", use_container_width=True):
+                if habit_name not in st.session_state.habit_logs:
+                    st.session_state.habit_logs[habit_name] = []
+                
+                if checked_today:
+                    st.session_state.habit_logs[habit_name].remove(today)
+                else:
+                    if today not in st.session_state.habit_logs[habit_name]:
                         st.session_state.habit_logs[habit_name].append(today)
-                        st.rerun()
+                st.rerun()
             
-            # 스트릭 (최근 7일 표시)
+            # 스트릭 (최근 7일 - 클릭하여 토글 가능)
             streak_cols = st.columns(7)
             for d in range(6, -1, -1):
                 day = datetime.now().date() - timedelta(days=d)
@@ -731,9 +761,16 @@ with menu[7]:
                 day_name = ["월", "화", "수", "목", "금", "토", "일"][day.weekday()]
                 is_done = day_str in logs
                 with streak_cols[6-d]:
-                    if is_done:
-                        st.markdown(f"<div style='text-align:center; background:{T['accent']}; color:white; padding:8px; border-radius:8px;'><b>{day_name}</b><br>✓</div>", unsafe_allow_html=True)
-                    else:
-                        st.markdown(f"<div style='text-align:center; background:{'#1e293b' if is_dark else '#e2e8f0'}; padding:8px; border-radius:8px;'><b>{day_name}</b><br>-</div>", unsafe_allow_html=True)
+                    # 완료된 날은 secondary(빨강), 미완료는 primary(하늘색)
+                    s_label = f"{day_name}\n✓" if is_done else f"{day_name}\n-"
+                    if st.button(s_label, key=f"h_day_{i}_{d}", type="secondary" if is_done else "primary", use_container_width=True):
+                        if habit_name not in st.session_state.habit_logs:
+                            st.session_state.habit_logs[habit_name] = []
+                        
+                        if is_done:
+                            st.session_state.habit_logs[habit_name].remove(day_str)
+                        else:
+                            st.session_state.habit_logs[habit_name].append(day_str)
+                        st.rerun()
             
             st.progress(pct / 100)
