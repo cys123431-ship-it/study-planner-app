@@ -4,120 +4,70 @@ import plotly.graph_objects as go
 import plotly.express as px
 from datetime import datetime, timedelta
 import json
-try:
-    from streamlit_gsheets import GSheetsConnection
-except ImportError:
-    pass # 로컬 환경에서 라이브러리 없을 때 대비
+import os
 
 # ---------------------------------------------------------
-# 0. 구글 시트 연동 설정 (보안 강화 및 Full Sync)
+# 0. 데이터 지속성 설정 (로컬 JSON 저장 방식)
 # ---------------------------------------------------------
-# Streamlit Secrets에서 주소를 가져옴
-if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
-    SHEET_URL = st.secrets["connections"]["gsheets"].get("spreadsheet", "")
-else:
-    SHEET_URL = "" 
-
-def get_connection():
-    """GSheetsConnection 객체 반환 (인증 정보는 st.secrets에서 자동 로드)"""
-    try:
-        # 서비스 계정 정보가 secrets에 있으면 자동으로 권한을 획득함
-        return st.connection("gsheets", type=GSheetsConnection)
-    except Exception as e:
-        return None
+DATA_FILE = "data.json"
 
 def sync_load_data():
-    """구글 시트에서 모든 데이터를 읽어와 st.session_state에 저장"""
-    conn = get_connection()
-    if not conn or not SHEET_URL:
+    """로컬 JSON 파일에서 데이터를 읽어와 세션 상태에 반영"""
+    if not os.path.exists(DATA_FILE):
         return False
     
     try:
-        # 1. 학기 (Dict)
-        try:
-            df = conn.read(spreadsheet=SHEET_URL, worksheet="Semester", ttl=0)
-            if df is not None and not df.empty:
-                res = {}
-                for _, row in df.iterrows():
-                    sem = str(row['Semester'])
-                    if sem not in res: res[sem] = {}
-                    res[sem][str(row['Subject'])] = bool(row['Done'])
-                st.session_state.semester_progress = res
-        except: pass
-
-        # 2~6, 8. 대다수 DataFrame
-        for ws, key in [("Monthly", "monthly_goals"), ("Weekly", "weekly_tasks"), 
-                        ("Daily", "daily_time_logs"), ("Study", "study_sessions"), 
-                        ("Project", "project_data"), ("Habits", "habits")]:
-            try:
-                df = conn.read(spreadsheet=SHEET_URL, worksheet=ws, ttl=0)
-                if df is not None and not df.empty:
-                    # 데이터 타입 보정
-                    if key in ["study_sessions", "project_data"]:
-                        df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(1).astype(int)
-                        df['Done'] = pd.to_numeric(df['Done'], errors='coerce').fillna(0).astype(int)
-                    st.session_state[key] = df
-            except: pass
-
-        # 7. 메모
-        try:
-            df = conn.read(spreadsheet=SHEET_URL, worksheet="Memo", ttl=0)
-            if df is not None and not df.empty:
-                st.session_state.daily_memo = str(df.iloc[0,0])
-        except: pass
-
-        # 9. 습관 로그 (Dict)
-        try:
-            df = conn.read(spreadsheet=SHEET_URL, worksheet="HabitLogs", ttl=0)
-            if df is not None and not df.empty:
-                res = {}
-                for _, row in df.iterrows():
-                    name = str(row['Habit'])
-                    dates = str(row['Dates']).split(',') if row['Dates'] else []
-                    res[name] = [l.strip() for l in logs if l.strip()]
-                st.session_state.habit_logs = res
-        except: pass
+        with open(DATA_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
         
+        # 1. 학기
+        if "semester_progress" in data:
+            st.session_state.semester_progress = data["semester_progress"]
+            
+        # 2~6, 8. DataFrames
+        keys = ["monthly_goals", "weekly_tasks", "daily_time_logs", 
+                "study_sessions", "project_data", "habits"]
+        for key in keys:
+            if key in data:
+                st.session_state[key] = pd.DataFrame(data[key])
+                
+        # 7. 메모
+        if "daily_memo" in data:
+            st.session_state.daily_memo = data["daily_memo"]
+            
+        # 9. 습관 로그
+        if "habit_logs" in data:
+            st.session_state.habit_logs = data["habit_logs"]
+            
         return True
     except Exception as e:
+        st.sidebar.error(f"데이터 로드 실패: {e}")
         return False
 
 def sync_save_data():
-    """st.session_state의 현재 데이터를 구글 시트에 업데이트"""
-    conn = get_connection()
-    # 쓰기 권한은 서비스 계정 설정이 필수임
-    if not conn or not SHEET_URL:
-        return False
-    
+    """세션 상태의 데이터를 로컬 JSON 파일로 저장"""
     try:
-        # 1. 학기
-        sem_rows = []
-        for sem, subs in st.session_state.semester_progress.items():
-            for sub, done in subs.items():
-                sem_rows.append({"Semester": sem, "Subject": sub, "Done": done})
-        conn.update(spreadsheet=SHEET_URL, worksheet="Semester", data=pd.DataFrame(sem_rows))
-
-        # 2~6, 8. DataFrames
-        conn.update(spreadsheet=SHEET_URL, worksheet="Monthly", data=st.session_state.monthly_goals)
-        conn.update(spreadsheet=SHEET_URL, worksheet="Weekly", data=st.session_state.weekly_tasks)
-        conn.update(spreadsheet=SHEET_URL, worksheet="Daily", data=st.session_state.daily_time_logs)
-        conn.update(spreadsheet=SHEET_URL, worksheet="Study", data=st.session_state.study_sessions)
-        conn.update(spreadsheet=SHEET_URL, worksheet="Project", data=st.session_state.project_data)
-        conn.update(spreadsheet=SHEET_URL, worksheet="Habits", data=st.session_state.habits)
-
-        # 7. 메모
-        conn.update(spreadsheet=SHEET_URL, worksheet="Memo", data=pd.DataFrame([{"Memo": st.session_state.daily_memo}]))
-
-        # 9. 습관 로그
-        log_rows = []
-        for name, dates in st.session_state.habit_logs.items():
-            log_rows.append({"Habit": name, "Dates": ",".join(dates)})
-        conn.update(spreadsheet=SHEET_URL, worksheet="HabitLogs", data=pd.DataFrame(log_rows))
+        data = {}
+        # 1. 학기 (Dict)
+        data["semester_progress"] = st.session_state.semester_progress
         
+        # 2~6, 8. DataFrames (JSON 저장을 위해 Dict로 변환)
+        keys = ["monthly_goals", "weekly_tasks", "daily_time_logs", 
+                "study_sessions", "project_data", "habits"]
+        for key in keys:
+            data[key] = st.session_state[key].to_dict(orient="records")
+            
+        # 7. 메모
+        data["daily_memo"] = st.session_state.daily_memo
+        
+        # 9. 습관 로그
+        data["habit_logs"] = st.session_state.habit_logs
+        
+        with open(DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4, ensure_ascii=False)
         return True
     except Exception as e:
-        # 저장 실패 시 경고창 (권한 부족 등)
-        st.sidebar.error(f"저장 실패: {e}")
+        st.sidebar.warning(f"데이터 자동 저장 실패: {e}")
         return False
 
 
@@ -152,13 +102,10 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # 구글 시트 수동 동기화 버튼
-    if st.button("🔄 구글 시트 동기화", use_container_width=True):
+    # 로컬 저장소 수동 동기화 버튼
+    if st.button("💾 데이터 강제 저장", use_container_width=True):
         if sync_save_data():
             st.success("저장 완료!")
-        else:
-            sync_load_data()
-            st.info("데이터를 불러왔습니다.")
         st.rerun()
 
     st.markdown("---")
@@ -447,7 +394,7 @@ if 'initialized' not in st.session_state:
         "물 2L 마시기": [str(today - timedelta(days=i)) for i in [0, 1, 2, 3, 4, 5, 6]]
     }
 
-    # 2단계: 구글 시트에서 데이터 덮어쓰기 시도
+    # 2단계: 로컬 JSON에서 데이터 덮어쓰기 시도
     sync_load_data()
 
 
