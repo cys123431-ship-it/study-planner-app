@@ -10,114 +10,94 @@ except ImportError:
     pass # 로컬 환경에서 라이브러리 없을 때 대비
 
 # ---------------------------------------------------------
-# 0. 구글 시트 연동 설정 (Secrets 적용)
+# 0. 구글 시트 연동 설정 (보안 강화 및 Full Sync)
 # ---------------------------------------------------------
-# 배포 시 Streamlit Secrets에 저장된 주소를 우선 사용
+# Streamlit Secrets에서 주소를 가져옴
 if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
-    SHEET_URL = st.secrets["connections"]["gsheets"]["spreadsheet"]
+    SHEET_URL = st.secrets["connections"]["gsheets"].get("spreadsheet", "")
 else:
-    # 로컬 테스트용 (Secrets가 없을 때만 사용)
     SHEET_URL = "" 
 
 def get_connection():
+    """GSheetsConnection 객체 반환 (인증 정보는 st.secrets에서 자동 로드)"""
     try:
+        # 서비스 계정 정보가 secrets에 있으면 자동으로 권한을 획득함
         return st.connection("gsheets", type=GSheetsConnection)
-    except:
+    except Exception as e:
         return None
 
 def sync_load_data():
     """구글 시트에서 모든 데이터를 읽어와 st.session_state에 저장"""
     conn = get_connection()
-    if not conn: return False
+    if not conn or not SHEET_URL:
+        return False
     
     try:
-        # 각 시트별 데이터 로드 (시트가 없으면 에러가 날 수 있으므로 예외처리)
         # 1. 학기 (Dict)
         try:
-            df = conn.read(spreadsheet=SHEET_URL, worksheet="Semester")
-            if not df.empty:
-                # 데이터 변환 (Long format -> Nested Dict)
+            df = conn.read(spreadsheet=SHEET_URL, worksheet="Semester", ttl=0)
+            if df is not None and not df.empty:
                 res = {}
                 for _, row in df.iterrows():
-                    sem = row['Semester']
+                    sem = str(row['Semester'])
                     if sem not in res: res[sem] = {}
-                    res[sem][row['Subject']] = bool(row['Done'])
+                    res[sem][str(row['Subject'])] = bool(row['Done'])
                 st.session_state.semester_progress = res
         except: pass
 
-        # 2. 월간 (DataFrame)
-        try:
-            df = conn.read(spreadsheet=SHEET_URL, worksheet="Monthly")
-            if not df.empty: st.session_state.monthly_goals = df
-        except: pass
+        # 2~6, 8. 대다수 DataFrame
+        for ws, key in [("Monthly", "monthly_goals"), ("Weekly", "weekly_tasks"), 
+                        ("Daily", "daily_time_logs"), ("Study", "study_sessions"), 
+                        ("Project", "project_data"), ("Habits", "habits")]:
+            try:
+                df = conn.read(spreadsheet=SHEET_URL, worksheet=ws, ttl=0)
+                if df is not None and not df.empty:
+                    # 데이터 타입 보정
+                    if key in ["study_sessions", "project_data"]:
+                        df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(1).astype(int)
+                        df['Done'] = pd.to_numeric(df['Done'], errors='coerce').fillna(0).astype(int)
+                    st.session_state[key] = df
+            except: pass
 
-        # 3. 주간 (DataFrame)
+        # 7. 메모
         try:
-            df = conn.read(spreadsheet=SHEET_URL, worksheet="Weekly")
-            if not df.empty: st.session_state.weekly_tasks = df
-        except: pass
-
-        # 4. 데일리 로그 (DataFrame)
-        try:
-            df = conn.read(spreadsheet=SHEET_URL, worksheet="Daily")
-            if not df.empty: st.session_state.daily_time_logs = df
-        except: pass
-
-        # 5. 스터디 (DataFrame)
-        try:
-            df = conn.read(spreadsheet=SHEET_URL, worksheet="Study")
-            if not df.empty: st.session_state.study_sessions = df
-        except: pass
-
-        # 6. 프로젝트 (DataFrame)
-        try:
-            df = conn.read(spreadsheet=SHEET_URL, worksheet="Project")
-            if not df.empty: st.session_state.project_data = df
-        except: pass
-
-        # 7. 메모 (String)
-        try:
-            df = conn.read(spreadsheet=SHEET_URL, worksheet="Memo")
-            if not df.empty: st.session_state.daily_memo = df.iloc[0,0]
-        except: pass
-
-        # 8. 습관 (DataFrame)
-        try:
-            df = conn.read(spreadsheet=SHEET_URL, worksheet="Habits")
-            if not df.empty: st.session_state.habits = df
+            df = conn.read(spreadsheet=SHEET_URL, worksheet="Memo", ttl=0)
+            if df is not None and not df.empty:
+                st.session_state.daily_memo = str(df.iloc[0,0])
         except: pass
 
         # 9. 습관 로그 (Dict)
         try:
-            df = conn.read(spreadsheet=SHEET_URL, worksheet="HabitLogs")
-            if not df.empty:
+            df = conn.read(spreadsheet=SHEET_URL, worksheet="HabitLogs", ttl=0)
+            if df is not None and not df.empty:
                 res = {}
                 for _, row in df.iterrows():
-                    name = row['Habit']
-                    logs = str(row['Dates']).split(',') if row['Dates'] else []
-                    res[name] = [l for l in logs if l]
+                    name = str(row['Habit'])
+                    dates = str(row['Dates']).split(',') if row['Dates'] else []
+                    res[name] = [l.strip() for l in logs if l.strip()]
                 st.session_state.habit_logs = res
         except: pass
         
         return True
     except Exception as e:
-        st.sidebar.error(f"데이터 로드 실패: {e}")
         return False
 
 def sync_save_data():
     """st.session_state의 현재 데이터를 구글 시트에 업데이트"""
     conn = get_connection()
-    if not conn: return
+    # 쓰기 권한은 서비스 계정 설정이 필수임
+    if not conn or not SHEET_URL:
+        return False
     
     try:
-        # 1. 학기 (Flatten Dict to DataFrame)
+        # 1. 학기
         sem_rows = []
         for sem, subs in st.session_state.semester_progress.items():
             for sub, done in subs.items():
                 sem_rows.append({"Semester": sem, "Subject": sub, "Done": done})
         conn.update(spreadsheet=SHEET_URL, worksheet="Semester", data=pd.DataFrame(sem_rows))
 
-        # 2~6, 8. 대다수 DataFrame은 그대로 업로드
+        # 2~6, 8. DataFrames
         conn.update(spreadsheet=SHEET_URL, worksheet="Monthly", data=st.session_state.monthly_goals)
         conn.update(spreadsheet=SHEET_URL, worksheet="Weekly", data=st.session_state.weekly_tasks)
         conn.update(spreadsheet=SHEET_URL, worksheet="Daily", data=st.session_state.daily_time_logs)
@@ -128,15 +108,17 @@ def sync_save_data():
         # 7. 메모
         conn.update(spreadsheet=SHEET_URL, worksheet="Memo", data=pd.DataFrame([{"Memo": st.session_state.daily_memo}]))
 
-        # 9. 습관 로그 (Flatten Dict)
+        # 9. 습관 로그
         log_rows = []
         for name, dates in st.session_state.habit_logs.items():
             log_rows.append({"Habit": name, "Dates": ",".join(dates)})
         conn.update(spreadsheet=SHEET_URL, worksheet="HabitLogs", data=pd.DataFrame(log_rows))
         
+        return True
     except Exception as e:
-        # 실시간 저장 중 오류가 발생해도 사용자 경험을 위해 사이드바에만 표시
-        st.sidebar.warning(f"데이터 자동 저장 중: {e}")
+        # 저장 실패 시 경고창 (권한 부족 등)
+        st.sidebar.error(f"저장 실패: {e}")
+        return False
 
 
 # ---------------------------------------------------------
