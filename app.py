@@ -31,16 +31,22 @@ THEMES = {
         'text_sidebar': '#1a1a2e',
         'border': '#e0e0e0',
         'card_shadow': 'rgba(0, 0, 0, 0.08)',
+        'btn_bg': '#ffffff',
+        'btn_text': '#000000',
+        'btn_border': '#e0e0e0',
     },
     'dark': {
-        'bg_main': '#0f0f1a',
-        'bg_sidebar': '#1a1a2e',
-        'bg_card': '#1e1e32',
-        'text_primary': '#f0f0f5',
-        'text_secondary': '#a0a0b0',
+        'bg_main': '#0a0a12',
+        'bg_sidebar': '#121220',
+        'bg_card': '#1a1a2e', 
+        'text_primary': '#ffffff', 
+        'text_secondary': '#b0b0c0',
         'text_sidebar': '#ffffff',
-        'border': '#2a2a4a',
-        'card_shadow': 'rgba(0, 0, 0, 0.3)',
+        'border': '#3a3a5a',
+        'card_shadow': 'rgba(0, 0, 0, 0.4)',
+        'btn_bg': '#1a1a2e',        # 다크모드 버튼 배경 (어두운 남색)
+        'btn_text': '#ffffff',      # 다크모드 버튼 글자 (흰색)
+        'btn_border': '#3a3a5a',    # 다크모드 버튼 테두리
     }
 }
 
@@ -52,7 +58,7 @@ ACCENT_DARK = "#5449CC"
 # 현재 테마 가져오기
 def get_theme():
     if st.session_state.theme == 'auto':
-        return 'light'  # 기본값 (브라우저 감지는 JS 필요)
+        return 'light'  # 기본값
     return st.session_state.theme
 
 theme = get_theme()
@@ -63,58 +69,34 @@ st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
     
-    /* 다크모드 자동 감지 - 브라우저 설정 기반 */
-    @media (prefers-color-scheme: dark) {{
-        :root {{
-            --bg-main: {THEMES['dark']['bg_main']};
-            --bg-sidebar: {THEMES['dark']['bg_sidebar']};
-            --bg-card: {THEMES['dark']['bg_card']};
-            --text-primary: {THEMES['dark']['text_primary']};
-            --text-secondary: {THEMES['dark']['text_secondary']};
-            --text-sidebar: {THEMES['dark']['text_sidebar']};
-            --border: {THEMES['dark']['border']};
-        }}
-    }}
-    @media (prefers-color-scheme: light) {{
-        :root {{
-            --bg-main: {THEMES['light']['bg_main']};
-            --bg-sidebar: {THEMES['light']['bg_sidebar']};
-            --bg-card: {THEMES['light']['bg_card']};
-            --text-primary: {THEMES['light']['text_primary']};
-            --text-secondary: {THEMES['light']['text_secondary']};
-            --text-sidebar: {THEMES['light']['text_sidebar']};
-            --border: {THEMES['light']['border']};
-        }}
+    /* 다이나믹 테마 변수 설정 */
+    :root {{
+        --bg-main: {T['bg_main']};
+        --bg-sidebar: {T['bg_sidebar']};
+        --bg-card: {T['bg_card']};
+        --text-primary: {T['text_primary']};
+        --text-secondary: {T['text_secondary']};
+        --text-sidebar: {T['text_sidebar']};
+        --border: {T['border']};
     }}
     
-    /* 수동 테마 오버라이드 */
-    .theme-light {{
-        --bg-main: {THEMES['light']['bg_main']};
-        --bg-sidebar: {THEMES['light']['bg_sidebar']};
-        --bg-card: {THEMES['light']['bg_card']};
-        --text-primary: {THEMES['light']['text_primary']};
-        --text-secondary: {THEMES['light']['text_secondary']};
-        --text-sidebar: {THEMES['light']['text_sidebar']};
-        --border: {THEMES['light']['border']};
-    }}
-    .theme-dark {{
-        --bg-main: {THEMES['dark']['bg_main']};
-        --bg-sidebar: {THEMES['dark']['bg_sidebar']};
-        --bg-card: {THEMES['dark']['bg_card']};
-        --text-primary: {THEMES['dark']['text_primary']};
-        --text-secondary: {THEMES['dark']['text_secondary']};
-        --text-sidebar: {THEMES['dark']['text_sidebar']};
-        --border: {THEMES['dark']['border']};
+    /* 전체 배경 및 기본 텍스트 강제 설정 */
+    .stApp, [data-testid="stAppViewContainer"] {{
+        background-color: var(--bg-main) !important;
+        color: var(--text-primary) !important;
     }}
     
-    /* 전체 배경 및 폰트 */
+    {'body.theme-dark, .theme-dark p, .theme-dark span, .theme-dark label, .theme-dark h1, .theme-dark h2, .theme-dark h3, .theme-dark h4 { color: #ffffff !important; }' if theme == 'dark' else ''}
+    
     .stApp {{
-        background-color: {T['bg_main']};
-        color: {T['text_primary']};
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     }}
     
-    /* 사이드바 스타일 - 시인성 개선 */
+    p, span, label, h1, h2, h3, h4 {{
+        color: var(--text-primary) !important;
+    }}
+    
+    /* 사이드바 스타일 */
     section[data-testid="stSidebar"] {{
         background: {T['bg_sidebar']};
         border-right: 1px solid {T['border']};
@@ -122,16 +104,8 @@ st.markdown(f"""
     section[data-testid="stSidebar"] * {{
         color: {T['text_sidebar']} !important;
     }}
-    section[data-testid="stSidebar"] .stMarkdown,
-    section[data-testid="stSidebar"] .stMarkdown p,
-    section[data-testid="stSidebar"] .stMarkdown span,
-    section[data-testid="stSidebar"] label,
-    section[data-testid="stSidebar"] .stRadio label {{
-        color: {T['text_sidebar']} !important;
-        font-weight: 500 !important;
-    }}
     
-    /* 라디오 버튼 (메뉴) 스타일 - 시인성 대폭 개선 */
+    /* 라디오 버튼 (메뉴) 스타일 */
     section[data-testid="stSidebar"] .stRadio > div {{
         gap: 6px;
     }}
@@ -148,11 +122,6 @@ st.markdown(f"""
         font-weight: 600 !important;
         color: {T['text_sidebar']} !important;
     }}
-    section[data-testid="stSidebar"] .stRadio > div > label span {{
-        color: {T['text_sidebar']} !important;
-        font-size: 1rem !important;
-        font-weight: 600 !important;
-    }}
     section[data-testid="stSidebar"] .stRadio > div > label:hover {{
         background-color: {'rgba(108, 99, 255, 0.15)' if theme == 'light' else 'rgba(108, 99, 255, 0.25)'};
         border-color: {ACCENT_COLOR};
@@ -168,7 +137,7 @@ st.markdown(f"""
         color: white !important;
     }}
     
-    /* 버튼 스타일 */
+    /* 메인 버튼 스타일 */
     .stButton > button {{
         background: linear-gradient(135deg, {ACCENT_COLOR} 0%, {ACCENT_DARK} 100%);
         color: white !important;
@@ -183,16 +152,20 @@ st.markdown(f"""
     .stButton > button:hover {{
         background: linear-gradient(135deg, {ACCENT_LIGHT} 0%, {ACCENT_COLOR} 100%);
         transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(108, 99, 255, 0.4);
     }}
     
-    /* 체크박스 스타일 */
-    .stCheckbox > label > div[data-checked="true"] {{
-        background-color: {ACCENT_COLOR} !important;
-        border-color: {ACCENT_COLOR} !important;
+    /* 위젯 텍스트 색상 강제 지정 */
+    [data-testid="stWidgetLabel"] p, 
+    .stCheckbox label span,
+    [data-testid="stCheckbox"] label span,
+    .stToggle label p,
+    .stMarkdown p, .stMarkdown span,
+    .streamlit-expanderHeader p {{
+        color: var(--text-primary) !important;
     }}
-    .stCheckbox label span {{
-        color: {T['text_primary']} !important;
+    
+    .theme-dark [data-testid="stWidgetLabel"] p {{
+        color: #ffffff !important;
     }}
     
     /* 카드 스타일 */
@@ -206,11 +179,7 @@ st.markdown(f"""
         transition: all 0.2s ease;
     }}
     .card:hover {{
-        box-shadow: 0 8px 30px {T['card_shadow']};
         transform: translateY(-2px);
-    }}
-    .card h3, .card h4, .card p, .card span, .card div {{
-        color: {T['text_primary']};
     }}
     
     /* 진행률 카드 */
@@ -222,18 +191,7 @@ st.markdown(f"""
         text-align: center;
         box-shadow: 0 8px 30px rgba(108, 99, 255, 0.3);
     }}
-    .progress-card * {{
-        color: white !important;
-    }}
-    .progress-card h2 {{
-        font-size: 3rem;
-        font-weight: 800;
-        margin: 0;
-    }}
-    .progress-card p {{
-        opacity: 0.9;
-        margin: 8px 0 0 0;
-    }}
+    .progress-card * {{ color: white !important; }}
     
     /* 메트릭 카드 */
     .metric-card {{
@@ -255,123 +213,64 @@ st.markdown(f"""
         margin-top: 4px;
     }}
     
-    /* 헤더 스타일 */
-    h1, h2, h3 {{
-        font-weight: 700 !important;
-        color: {T['text_primary']} !important;
-    }}
-    
-    /* 구분선 */
-    hr {{
-        border: none;
-        height: 1px;
-        background: linear-gradient(90deg, transparent, {ACCENT_COLOR}40, transparent);
-        margin: 24px 0;
-    }}
-    
-    /* 데이터 에디터 스타일 */
-    .stDataFrame {{
-        border-radius: 12px;
-        overflow: hidden;
-    }}
+    /* 데이터프레임 스타일 */
     [data-testid="stDataFrame"] {{
         background: {T['bg_card']};
+        border: 1px solid {T['border']};
     }}
     
-    /* Expander 스타일 */
-    .streamlit-expanderHeader {{
+    /* 입력 필드 스타일 */
+    .stTextInput input, .stNumberInput input {{
+        border-radius: 10px !important;
+        border: 2px solid {T['border']} !important;
         background: {T['bg_card']} !important;
         color: {T['text_primary']} !important;
-        border-radius: 12px;
-    }}
-    .streamlit-expanderContent {{
-        background: {T['bg_card']};
-        border: 1px solid {T['border']};
-        border-radius: 0 0 12px 12px;
     }}
     
-    /* 모바일 최적화 */
-    @media (max-width: 768px) {{
-        .stApp {{
-            padding: 8px;
-        }}
-        .card {{
-            padding: 16px;
-            border-radius: 12px;
-        }}
-        h1 {{
-            font-size: 1.5rem !important;
-        }}
-        h2 {{
-            font-size: 1.2rem !important;
-        }}
+    /* ------------------------------------------------------------- */
+    /* [수정됨] 관리 모드 삭제 버튼 디자인 (테마에 따라 완벽하게 변경) */
+    /* ------------------------------------------------------------- */
+    div[data-testid="column"]:last-child button {{
+        background: {T['btn_bg']} !important;
+        color: {T['btn_text']} !important;
+        border: 1px solid {T['btn_border']} !important;
+        padding: 4px 12px !important;
+        border-radius: 10px !important;
+        transition: all 0.2s !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        height: 42px !important;
+        width: 100% !important;
+        cursor: pointer !important;
+        box-shadow: 0 2px 8px {T['card_shadow']} !important;
     }}
-    
-    /* 탭 스타일 */
-    .stTabs [data-baseweb="tab-list"] {{
-        gap: 4px;
-        background: {T['bg_card']};
-        padding: 4px;
-        border-radius: 12px;
-        border: 1px solid {T['border']};
+
+    /* 버튼 내부 텍스트 색상 강제 지정 */
+    div[data-testid="column"]:last-child button p,
+    div[data-testid="column"]:last-child button span,
+    div[data-testid="column"]:last-child button div {{
+        color: {T['btn_text']} !important;
+        font-weight: 600 !important;
+        font-size: 0.95rem !important;
     }}
-    .stTabs [data-baseweb="tab"] {{
-        border-radius: 8px;
-        padding: 10px 20px;
-        font-weight: 500;
-        color: {T['text_primary']};
+
+    /* 버튼 호버(마우스 올렸을 때) 효과 */
+    div[data-testid="column"]:last-child button:hover {{
+        background: {'#2d2d44' if theme == 'dark' else '#f1f3f5'} !important;
+        border-color: #ff4b4b !important; /* 호버 시 빨간 테두리 */
+        color: #ff4b4b !important;       /* 호버 시 빨간 글씨 */
+        transform: translateY(-1px) !important;
+        box-shadow: 0 4px 12px {T['card_shadow']} !important;
     }}
-    .stTabs [aria-selected="true"] {{
-        background: {ACCENT_COLOR} !important;
-        color: white !important;
+
+    /* 호버 시 내부 텍스트 색상 변경 */
+    div[data-testid="column"]:last-child button:hover p,
+    div[data-testid="column"]:last-child button:hover span {{
+        color: #ff4b4b !important;
     }}
-    
-    /* 텍스트 영역 */
-    .stTextArea textarea {{
-        border-radius: 12px;
-        border: 2px solid {T['border']};
-        background: {T['bg_card']};
-        color: {T['text_primary']};
-        transition: border-color 0.2s;
-    }}
-    .stTextArea textarea:focus {{
-        border-color: {ACCENT_COLOR};
-        box-shadow: 0 0 0 3px rgba(108, 99, 255, 0.1);
-    }}
-    .stTextArea textarea::placeholder {{
-        color: {T['text_secondary']};
-    }}
-    
-    /* Select box */
-    .stSelectbox > div > div {{
-        background: {T['bg_card']};
-        border-color: {T['border']};
-        color: {T['text_primary']};
-    }}
-    
-    /* 테마 토글 버튼 */
-    .theme-toggle {{
-        display: flex;
-        gap: 4px;
-        background: {T['bg_card']};
-        padding: 4px;
-        border-radius: 10px;
-        border: 1px solid {T['border']};
-    }}
-    .theme-btn {{
-        padding: 8px 12px;
-        border-radius: 8px;
-        border: none;
-        cursor: pointer;
-        font-size: 0.9rem;
-        transition: all 0.2s;
-        background: transparent;
-        color: {T['text_secondary']};
-    }}
-    .theme-btn.active {{
-        background: {ACCENT_COLOR};
-        color: white;
-    }}
+    /* ------------------------------------------------------------- */
+
     </style>
 """, unsafe_allow_html=True)
 
@@ -498,7 +397,7 @@ with st.sidebar:
         </div>
     """, unsafe_allow_html=True)
     
-    # 메뉴 선택 (6개 섹션)
+    # 메뉴 선택
     st.markdown(f"<p style='font-size: 0.8rem; color: {T['text_secondary']}; margin-bottom: 8px;'>📂 Menu</p>", unsafe_allow_html=True)
     menu = st.radio(
         "Navigation",
@@ -524,7 +423,6 @@ if menu == "📚 Semester":
     st.markdown("# 📚 2-Year Curriculum")
     st.markdown("배재대 컴퓨터공학과 편입생 (2026-2027) 로드맵")
     
-    # 전체 이수율 계산
     total_subjects = sum(len(subjects) for subjects in st.session_state.semester_progress.values())
     completed_subjects = sum(
         sum(1 for done in subjects.values() if done) 
@@ -532,7 +430,6 @@ if menu == "📚 Semester":
     )
     overall_rate = int((completed_subjects / total_subjects * 100) if total_subjects > 0 else 0)
     
-    # 전체 진행률 카드
     st.markdown(f"""
         <div class="progress-card">
             <h2>{overall_rate}%</h2>
@@ -542,7 +439,6 @@ if menu == "📚 Semester":
     
     st.markdown("---")
     
-    # 학기별 과목 표시
     for semester, subjects in st.session_state.semester_progress.items():
         semester_done = sum(1 for done in subjects.values() if done)
         semester_total = len(subjects)
@@ -567,7 +463,6 @@ elif menu == "📅 Monthly":
     st.markdown(f"# 📅 {month_name}")
     st.markdown("이달의 목표를 설정하고 달성률을 확인하세요")
     
-    # 월간 달성률 계산
     month_df = st.session_state.monthly_goals
     month_total = len(month_df)
     month_done = len(month_df[month_df['Done'] == True]) if month_total > 0 else 0
@@ -576,7 +471,6 @@ elif menu == "📅 Monthly":
     col1, col2 = st.columns([1, 2])
     
     with col1:
-        # 원형 프로그레스
         fig = go.Figure(data=[go.Pie(
             values=[month_done, month_total - month_done],
             hole=0.75,
@@ -597,18 +491,43 @@ elif menu == "📅 Monthly":
     
     with col2:
         st.markdown("### 🎯 Goals")
-        edited_monthly = st.data_editor(
-            st.session_state.monthly_goals,
-            num_rows="dynamic",
-            use_container_width=True,
-            column_config={
-                "Done": st.column_config.CheckboxColumn("✓", default=False, width="small"),
-                "Goal": st.column_config.TextColumn("목표", width="large"),
-            },
-            hide_index=True,
-            key="monthly_editor"
-        )
-        st.session_state.monthly_goals = edited_monthly
+        
+        col_m1, col_m2 = st.columns([1, 1])
+        with col_m1:
+            show_add = st.toggle("➕ 항목 추가", key="toggle_monthly_add")
+        with col_m2:
+            manage_mode = st.toggle("⚙️ 관리 모드", key="manage_monthly")
+
+        if show_add:
+            with st.form("add_monthly_goal", clear_on_submit=True):
+                new_goal = st.text_input("목표 내용")
+                if st.form_submit_button("추가", use_container_width=True):
+                    if new_goal:
+                        new_row = pd.DataFrame([{"Goal": new_goal, "Done": False}])
+                        st.session_state.monthly_goals = pd.concat([st.session_state.monthly_goals, new_row], ignore_index=True)
+                        st.rerun()
+        
+        if manage_mode:
+            st.info("💡 삭제하고 싶은 항목 옆의 '삭제' 버튼을 누르세요.")
+            for idx, row in st.session_state.monthly_goals.iterrows():
+                m_col1, m_col2 = st.columns([5, 1])
+                m_col1.markdown(f"**{row['Goal']}**")
+                if m_col2.button("삭제", key=f"del_monthly_{idx}", help="이 목표를 삭제합니다.", type="secondary"):
+                    st.session_state.monthly_goals = st.session_state.monthly_goals.drop(idx).reset_index(drop=True)
+                    st.rerun()
+        else:
+            edited_monthly = st.data_editor(
+                st.session_state.monthly_goals,
+                num_rows="dynamic",
+                use_container_width=True,
+                column_config={
+                    "Done": st.column_config.CheckboxColumn("✓", default=False, width="small"),
+                    "Goal": st.column_config.TextColumn("목표", width="large"),
+                },
+                hide_index=True,
+                key="monthly_editor"
+            )
+            st.session_state.monthly_goals = edited_monthly
 
 # === [3] Weekly (주간) ===
 elif menu == "📆 Weekly":
@@ -618,13 +537,11 @@ elif menu == "📆 Weekly":
     st.markdown(f"# 📆 Week {week_num}")
     st.markdown("이번 주 할 일을 계획하고 진행 상황을 확인하세요")
     
-    # 주간 진행률 계산
     weekly_df = st.session_state.weekly_tasks.copy()
     week_total = len(weekly_df)
     week_done = len(weekly_df[weekly_df['Done'] == True]) if week_total > 0 else 0
     week_rate = int((week_done / week_total * 100) if week_total > 0 else 0)
     
-    # 메트릭 카드들
     col1, col2, col3 = st.columns(3)
     with col1:
         st.markdown(f"""
@@ -650,7 +567,6 @@ elif menu == "📆 Weekly":
     
     st.markdown("---")
     
-    # 주간 바 차트
     chart_df = weekly_df.copy()
     chart_df['Value'] = chart_df['Done'].apply(lambda x: 100 if x else 20)
     
@@ -678,19 +594,47 @@ elif menu == "📆 Weekly":
     st.markdown("---")
     
     st.markdown("### 📋 Tasks")
-    edited_weekly = st.data_editor(
-        st.session_state.weekly_tasks,
-        num_rows="dynamic",
-        use_container_width=True,
-        column_config={
-            "Done": st.column_config.CheckboxColumn("✓", default=False, width="small"),
-            "Day": st.column_config.SelectboxColumn("요일", options=["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], width="small"),
-            "Task": st.column_config.TextColumn("할 일", width="large"),
-        },
-        hide_index=True,
-        key="weekly_editor"
-    )
-    st.session_state.weekly_tasks = edited_weekly
+    
+    col_w1, col_w2 = st.columns([1, 1])
+    with col_w1:
+        show_add_w = st.toggle("➕ 항목 추가", key="toggle_weekly_add")
+    with col_w2:
+        manage_mode_w = st.toggle("⚙️ 관리 모드", key="manage_weekly")
+
+    if show_add_w:
+        with st.form("add_weekly_task", clear_on_submit=True):
+            col_a, col_b = st.columns([1, 3])
+            new_day = col_a.selectbox("요일", options=["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])
+            new_task = col_b.text_input("할 일")
+            if st.form_submit_button("추가", use_container_width=True):
+                if new_task:
+                    new_row = pd.DataFrame([{"Day": new_day, "Task": new_task, "Done": False}])
+                    st.session_state.weekly_tasks = pd.concat([st.session_state.weekly_tasks, new_row], ignore_index=True)
+                    st.rerun()
+
+    if manage_mode_w:
+        st.info("💡 삭제하고 싶은 일정을 선택하세요.")
+        for idx, row in st.session_state.weekly_tasks.iterrows():
+            w_col1, w_col2, w_col3 = st.columns([1, 4, 1])
+            w_col1.markdown(f"**{row['Day']}**")
+            w_col2.markdown(row['Task'])
+            if w_col3.button("삭제", key=f"del_weekly_{idx}", help="이 할 일을 삭제합니다.", type="secondary", use_container_width=True):
+                st.session_state.weekly_tasks = st.session_state.weekly_tasks.drop(idx).reset_index(drop=True)
+                st.rerun()
+    else:
+        edited_weekly = st.data_editor(
+            st.session_state.weekly_tasks,
+            num_rows="dynamic",
+            use_container_width=True,
+            column_config={
+                "Done": st.column_config.CheckboxColumn("✓", default=False, width="small"),
+                "Day": st.column_config.SelectboxColumn("요일", options=["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], width="small"),
+                "Task": st.column_config.TextColumn("할 일", width="large"),
+            },
+            hide_index=True,
+            key="weekly_editor"
+        )
+        st.session_state.weekly_tasks = edited_weekly
 
 # === [4] Daily (일간) ===
 elif menu == "📝 Daily":
@@ -700,7 +644,6 @@ elif menu == "📝 Daily":
     st.markdown(f"# 📝 {day_str}")
     st.markdown("오늘의 공부 기록을 남기세요")
     
-    # 총 공부 시간 계산
     time_df = st.session_state.daily_time_logs
     total_minutes = 0
     for _, row in time_df.iterrows():
@@ -733,20 +676,55 @@ elif menu == "📝 Daily":
     st.markdown("---")
     
     st.markdown("### ⏰ Time Log")
-    edited_time = st.data_editor(
-        st.session_state.daily_time_logs,
-        num_rows="dynamic",
-        use_container_width=True,
-        column_config={
-            "StartTime": st.column_config.TextColumn("시작", width="small"),
-            "EndTime": st.column_config.TextColumn("종료", width="small"),
-            "Activity": st.column_config.TextColumn("활동", width="large"),
-            "Category": st.column_config.SelectboxColumn("분류", options=["Study", "Practice", "Review", "Project", "Other"], width="small"),
-        },
-        hide_index=True,
-        key="time_editor"
-    )
-    st.session_state.daily_time_logs = edited_time
+    
+    col_d1, col_d2 = st.columns([1, 1])
+    with col_d1:
+        show_add_d = st.toggle("➕ 기록 추가", key="toggle_daily_add")
+    with col_d2:
+        manage_mode_d = st.toggle("⚙️ 관리 모드", key="manage_daily")
+
+    if show_add_d:
+        with st.form("add_daily_log", clear_on_submit=True):
+            col_a, col_b = st.columns(2)
+            s_time = col_a.text_input("시작 (HH:MM)", placeholder="09:00")
+            e_time = col_b.text_input("종료 (HH:MM)", placeholder="11:00")
+            activity = st.text_input("활동 내용")
+            category = st.selectbox("분류", options=["Study", "Practice", "Review", "Project", "Other"])
+            if st.form_submit_button("기록 추가", use_container_width=True):
+                if activity:
+                    new_row = pd.DataFrame([{
+                        "StartTime": s_time, 
+                        "EndTime": e_time, 
+                        "Activity": activity, 
+                        "Category": category
+                    }])
+                    st.session_state.daily_time_logs = pd.concat([st.session_state.daily_time_logs, new_row], ignore_index=True)
+                    st.rerun()
+
+    if manage_mode_d:
+        st.info("💡 삭제하고 싶은 기록 옆의 '삭제' 버튼을 누르세요.")
+        for idx, row in st.session_state.daily_time_logs.iterrows():
+            d_col1, d_col2, d_col3 = st.columns([2, 5, 1])
+            d_col1.markdown(f"{row['StartTime']}~{row['EndTime']}")
+            d_col2.markdown(f"**[{row['Category']}]** {row['Activity']}")
+            if d_col3.button("삭제", key=f"del_daily_{idx}", help="이 시간 기록을 삭제합니다.", type="secondary", use_container_width=True):
+                st.session_state.daily_time_logs = st.session_state.daily_time_logs.drop(idx).reset_index(drop=True)
+                st.rerun()
+    else:
+        edited_time = st.data_editor(
+            st.session_state.daily_time_logs,
+            num_rows="dynamic",
+            use_container_width=True,
+            column_config={
+                "StartTime": st.column_config.TextColumn("시작", width="small"),
+                "EndTime": st.column_config.TextColumn("종료", width="small"),
+                "Activity": st.column_config.TextColumn("활동", width="large"),
+                "Category": st.column_config.SelectboxColumn("분류", options=["Study", "Practice", "Review", "Project", "Other"], width="small"),
+            },
+            hide_index=True,
+            key="time_editor"
+        )
+        st.session_state.daily_time_logs = edited_time
     
     st.markdown("---")
     
@@ -800,22 +778,58 @@ elif menu == "👥 Study":
     
     st.markdown("---")
     
-    st.markdown("### ✏️ Edit Sessions")
-    edited_study = st.data_editor(
-        st.session_state.study_sessions,
-        num_rows="dynamic",
-        use_container_width=True,
-        column_config={
-            "Name": st.column_config.TextColumn("스터디명", width="medium"),
-            "Schedule": st.column_config.TextColumn("일정", width="medium"),
-            "TotalSessions": st.column_config.NumberColumn("총 회차", min_value=1, width="small"),
-            "CompletedSessions": st.column_config.NumberColumn("완료", min_value=0, width="small"),
-            "Status": st.column_config.SelectboxColumn("상태", options=["Active", "Paused", "Completed"], width="small"),
-        },
-        hide_index=True,
-        key="study_editor"
-    )
-    st.session_state.study_sessions = edited_study
+    st.markdown("### ✏️ Session List & Editor")
+    
+    col_s1, col_s2 = st.columns([1, 1])
+    with col_s1:
+        show_add_s = st.toggle("➕ 항목 추가", key="toggle_study_add")
+    with col_s2:
+        manage_mode_s = st.toggle("⚙️ 관리 모드", key="manage_study")
+
+    if show_add_s:
+        with st.form("add_study_session", clear_on_submit=True):
+            s_name = st.text_input("스터디 이름")
+            s_schedule = st.text_input("일정 (예: 매주 화요일 19:00)")
+            col_a, col_b = st.columns(2)
+            s_total = col_a.number_input("총 회차", min_value=1, value=10)
+            s_done = col_b.number_input("현재 완료", min_value=0, value=0)
+            if st.form_submit_button("스터디 생성", use_container_width=True):
+                if s_name:
+                    new_row = pd.DataFrame([{
+                        "Name": s_name, 
+                        "Schedule": s_schedule, 
+                        "TotalSessions": int(s_total), 
+                        "CompletedSessions": int(s_done), 
+                        "Status": "Active"
+                    }])
+                    st.session_state.study_sessions = pd.concat([st.session_state.study_sessions, new_row], ignore_index=True)
+                    st.rerun()
+
+    if manage_mode_s:
+        st.info("💡 삭제하고 싶은 스터디 옆의 '삭제' 버튼을 누르세요.")
+        for idx, row in st.session_state.study_sessions.iterrows():
+            sc_1, sc_2, sc_3 = st.columns([4, 2, 1])
+            sc_1.markdown(f"**{row['Name']}**")
+            sc_2.markdown(row['Schedule'])
+            if sc_3.button("삭제", key=f"del_study_{idx}", help="이 스터디 세션을 삭제합니다.", type="secondary", use_container_width=True):
+                st.session_state.study_sessions = st.session_state.study_sessions.drop(idx).reset_index(drop=True)
+                st.rerun()
+    else:
+        edited_study = st.data_editor(
+            st.session_state.study_sessions,
+            num_rows="dynamic",
+            use_container_width=True,
+            column_config={
+                "Name": st.column_config.TextColumn("스터디명", width="medium"),
+                "Schedule": st.column_config.TextColumn("일정", width="medium"),
+                "TotalSessions": st.column_config.NumberColumn("총 회차", min_value=1, width="small"),
+                "CompletedSessions": st.column_config.NumberColumn("완료", min_value=0, width="small"),
+                "Status": st.column_config.SelectboxColumn("상태", options=["Active", "Paused", "Completed"], width="small"),
+            },
+            hide_index=True,
+            key="study_editor"
+        )
+        st.session_state.study_sessions = edited_study
 
 # === [6] Project (프로젝트) ===
 elif menu == "💼 Project":
@@ -895,19 +909,55 @@ elif menu == "💼 Project":
     
     st.markdown("---")
     
-    st.markdown("### ✏️ Edit Projects")
-    edited_proj = st.data_editor(
-        st.session_state.project_data,
-        num_rows="dynamic",
-        use_container_width=True,
-        column_config={
-            "Done": st.column_config.CheckboxColumn("✓", default=False, width="small"),
-            "Subject": st.column_config.TextColumn("과목/프로젝트", width="medium"),
-            "Task": st.column_config.TextColumn("할 일", width="large"),
-            "Deadline": st.column_config.TextColumn("마감일 (YYYY-MM-DD)", width="medium"),
-            "Priority": st.column_config.SelectboxColumn("우선순위", options=["High", "Medium", "Low"], width="small"),
-        },
-        hide_index=True,
-        key="project_editor"
-    )
-    st.session_state.project_data = edited_proj
+    st.markdown("### ✏️ Project List & Editor")
+    
+    col_p1, col_p2 = st.columns([1, 1])
+    with col_p1:
+        show_add_p = st.toggle("➕ 항목 추가", key="toggle_project_add")
+    with col_p2:
+        manage_mode_p = st.toggle("⚙️ 관리 모드", key="manage_project")
+
+    if show_add_p:
+        with st.form("add_project_task", clear_on_submit=True):
+            p_subject = st.text_input("과목/프로젝트")
+            p_task = st.text_input("할 일 내용")
+            col_a, col_b = st.columns(2)
+            p_deadline = col_a.text_input("마감 (YYYY-MM-DD)", placeholder="2026-12-31")
+            p_priority = col_b.selectbox("우선순위", options=["High", "Medium", "Low"], index=1)
+            if st.form_submit_button("태스크 추가", use_container_width=True):
+                if p_subject and p_task:
+                    new_row = pd.DataFrame([{
+                        "Subject": p_subject, 
+                        "Task": p_task, 
+                        "Done": False, 
+                        "Deadline": p_deadline, 
+                        "Priority": p_priority
+                    }])
+                    st.session_state.project_data = pd.concat([st.session_state.project_data, new_row], ignore_index=True)
+                    st.rerun()
+
+    if manage_mode_p:
+        st.info("💡 삭제하고 싶은 태스크 옆의 '삭제' 버튼을 누르세요.")
+        for idx, row in st.session_state.project_data.iterrows():
+            pr_1, pr_2, pr_3 = st.columns([3, 4, 1])
+            pr_1.markdown(f"**{row['Subject']}**")
+            pr_2.markdown(row['Task'])
+            if pr_3.button("삭제", key=f"del_project_{idx}", help="이 프로젝트 태스크를 삭제합니다.", type="secondary", use_container_width=True):
+                st.session_state.project_data = st.session_state.project_data.drop(idx).reset_index(drop=True)
+                st.rerun()
+    else:
+        edited_proj = st.data_editor(
+            st.session_state.project_data,
+            num_rows="dynamic",
+            use_container_width=True,
+            column_config={
+                "Done": st.column_config.CheckboxColumn("✓", default=False, width="small"),
+                "Subject": st.column_config.TextColumn("과목/프로젝트", width="medium"),
+                "Task": st.column_config.TextColumn("할 일", width="large"),
+                "Deadline": st.column_config.TextColumn("마감일 (YYYY-MM-DD)", width="medium"),
+                "Priority": st.column_config.SelectboxColumn("우선순위", options=["High", "Medium", "Low"], width="small"),
+            },
+            hide_index=True,
+            key="project_editor"
+        )
+        st.session_state.project_data = edited_proj

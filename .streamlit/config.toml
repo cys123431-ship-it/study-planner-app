@@ -1,6 +1,4 @@
 [theme]
 primaryColor = "#6C63FF"
-backgroundColor = "#f8f9fa"
-secondaryBackgroundColor = "#ffffff"
-textColor = "#1a1a2e"
 font = "sans serif"
+# 배경색 및 텍스트 강제 설정을 제거하여 app.py의 다이나믹 테마 시스템이 작동하도록 함
