@@ -10,9 +10,14 @@ except ImportError:
     pass # 로컬 환경에서 라이브러리 없을 때 대비
 
 # ---------------------------------------------------------
-# 0. 구글 시트 연동 설정
+# 0. 구글 시트 연동 설정 (Secrets 적용)
 # ---------------------------------------------------------
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1j5uyiVgHGBFvJ19A7lwTyygLUq4UY_Z6SkWo5NkeLfo/edit?usp=sharing"
+# 배포 시 Streamlit Secrets에 저장된 주소를 우선 사용
+if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
+    SHEET_URL = st.secrets["connections"]["gsheets"]["spreadsheet"]
+else:
+    # 로컬 테스트용 (Secrets가 없을 때만 사용)
+    SHEET_URL = "" 
 
 def get_connection():
     try:
