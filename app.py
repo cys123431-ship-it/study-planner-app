@@ -3,6 +3,136 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 from datetime import datetime, timedelta
+import json
+try:
+    from streamlit_gsheets import GSheetsConnection
+except ImportError:
+    pass # 로컬 환경에서 라이브러리 없을 때 대비
+
+# ---------------------------------------------------------
+# 0. 구글 시트 연동 설정
+# ---------------------------------------------------------
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1j5uyiVgHGBFvJ19A7lwTyygLUq4UY_Z6SkWo5NkeLfo/edit?usp=sharing"
+
+def get_connection():
+    try:
+        return st.connection("gsheets", type=GSheetsConnection)
+    except:
+        return None
+
+def sync_load_data():
+    """구글 시트에서 모든 데이터를 읽어와 st.session_state에 저장"""
+    conn = get_connection()
+    if not conn: return False
+    
+    try:
+        # 각 시트별 데이터 로드 (시트가 없으면 에러가 날 수 있으므로 예외처리)
+        # 1. 학기 (Dict)
+        try:
+            df = conn.read(spreadsheet=SHEET_URL, worksheet="Semester")
+            if not df.empty:
+                # 데이터 변환 (Long format -> Nested Dict)
+                res = {}
+                for _, row in df.iterrows():
+                    sem = row['Semester']
+                    if sem not in res: res[sem] = {}
+                    res[sem][row['Subject']] = bool(row['Done'])
+                st.session_state.semester_progress = res
+        except: pass
+
+        # 2. 월간 (DataFrame)
+        try:
+            df = conn.read(spreadsheet=SHEET_URL, worksheet="Monthly")
+            if not df.empty: st.session_state.monthly_goals = df
+        except: pass
+
+        # 3. 주간 (DataFrame)
+        try:
+            df = conn.read(spreadsheet=SHEET_URL, worksheet="Weekly")
+            if not df.empty: st.session_state.weekly_tasks = df
+        except: pass
+
+        # 4. 데일리 로그 (DataFrame)
+        try:
+            df = conn.read(spreadsheet=SHEET_URL, worksheet="Daily")
+            if not df.empty: st.session_state.daily_time_logs = df
+        except: pass
+
+        # 5. 스터디 (DataFrame)
+        try:
+            df = conn.read(spreadsheet=SHEET_URL, worksheet="Study")
+            if not df.empty: st.session_state.study_sessions = df
+        except: pass
+
+        # 6. 프로젝트 (DataFrame)
+        try:
+            df = conn.read(spreadsheet=SHEET_URL, worksheet="Project")
+            if not df.empty: st.session_state.project_data = df
+        except: pass
+
+        # 7. 메모 (String)
+        try:
+            df = conn.read(spreadsheet=SHEET_URL, worksheet="Memo")
+            if not df.empty: st.session_state.daily_memo = df.iloc[0,0]
+        except: pass
+
+        # 8. 습관 (DataFrame)
+        try:
+            df = conn.read(spreadsheet=SHEET_URL, worksheet="Habits")
+            if not df.empty: st.session_state.habits = df
+        except: pass
+
+        # 9. 습관 로그 (Dict)
+        try:
+            df = conn.read(spreadsheet=SHEET_URL, worksheet="HabitLogs")
+            if not df.empty:
+                res = {}
+                for _, row in df.iterrows():
+                    name = row['Habit']
+                    logs = str(row['Dates']).split(',') if row['Dates'] else []
+                    res[name] = [l for l in logs if l]
+                st.session_state.habit_logs = res
+        except: pass
+        
+        return True
+    except Exception as e:
+        st.sidebar.error(f"데이터 로드 실패: {e}")
+        return False
+
+def sync_save_data():
+    """st.session_state의 현재 데이터를 구글 시트에 업데이트"""
+    conn = get_connection()
+    if not conn: return
+    
+    try:
+        # 1. 학기 (Flatten Dict to DataFrame)
+        sem_rows = []
+        for sem, subs in st.session_state.semester_progress.items():
+            for sub, done in subs.items():
+                sem_rows.append({"Semester": sem, "Subject": sub, "Done": done})
+        conn.update(spreadsheet=SHEET_URL, worksheet="Semester", data=pd.DataFrame(sem_rows))
+
+        # 2~6, 8. 대다수 DataFrame은 그대로 업로드
+        conn.update(spreadsheet=SHEET_URL, worksheet="Monthly", data=st.session_state.monthly_goals)
+        conn.update(spreadsheet=SHEET_URL, worksheet="Weekly", data=st.session_state.weekly_tasks)
+        conn.update(spreadsheet=SHEET_URL, worksheet="Daily", data=st.session_state.daily_time_logs)
+        conn.update(spreadsheet=SHEET_URL, worksheet="Study", data=st.session_state.study_sessions)
+        conn.update(spreadsheet=SHEET_URL, worksheet="Project", data=st.session_state.project_data)
+        conn.update(spreadsheet=SHEET_URL, worksheet="Habits", data=st.session_state.habits)
+
+        # 7. 메모
+        conn.update(spreadsheet=SHEET_URL, worksheet="Memo", data=pd.DataFrame([{"Memo": st.session_state.daily_memo}]))
+
+        # 9. 습관 로그 (Flatten Dict)
+        log_rows = []
+        for name, dates in st.session_state.habit_logs.items():
+            log_rows.append({"Habit": name, "Dates": ",".join(dates)})
+        conn.update(spreadsheet=SHEET_URL, worksheet="HabitLogs", data=pd.DataFrame(log_rows))
+        
+    except Exception as e:
+        # 실시간 저장 중 오류가 발생해도 사용자 경험을 위해 사이드바에만 표시
+        st.sidebar.warning(f"데이터 자동 저장 중: {e}")
+
 
 # ---------------------------------------------------------
 # 1. 페이지 설정
@@ -33,6 +163,17 @@ with st.sidebar:
         st.session_state.theme = new_theme
         st.rerun()
     
+    st.markdown("---")
+    
+    # 구글 시트 수동 동기화 버튼
+    if st.button("🔄 구글 시트 동기화", use_container_width=True):
+        if sync_save_data():
+            st.success("저장 완료!")
+        else:
+            sync_load_data()
+            st.info("데이터를 불러왔습니다.")
+        st.rerun()
+
     st.markdown("---")
     st.markdown("### 📤 데이터 관리")
     
@@ -258,9 +399,13 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 3. 데이터 초기화 (모든 과목 포함)
+# 3. 데이터 초기화 (시트에서 먼저 시도 후 없으면 기본값)
 # ---------------------------------------------------------
-if 'semester_progress' not in st.session_state:
+# 앱 시작 시 한 번만 시트에서 데이터를 불러옴
+if 'initialized' not in st.session_state:
+    st.session_state.initialized = True
+    
+    # 1단계: 기본값 설정 (시트 로드 실패 대비)
     st.session_state.semester_progress = {
         "1-1 (2026 Spring)": {
             "기초C프로그래밍": True, "컴퓨터구조": False, "자바프로그래밍": False, 
@@ -275,24 +420,14 @@ if 'semester_progress' not in st.session_state:
             "진로지도": False, "데이터베이스보안": False
         },
         "2-2 (2027 Fall)": {
-            "네트워크보안": False, "컴퓨터네트워크": False, "운영체제보안": False, 
-            "진로지도": False, "데이터베이스보안": False, # (스크린샷상 중복된 항목이 있어 보이나 그대로 반영)
             "알고리즘(7급)": False, "졸업지도": False, "리눅스보안": False, "SW취약점분석": False
         }
     }
-# (중복 키 방지를 위해 2-2 데이터 정리)
-st.session_state.semester_progress["2-2 (2027 Fall)"] = {
-    "알고리즘(7급)": False, "졸업지도": False, "리눅스보안": False, "SW취약점분석": False
-}
-
-if 'monthly_goals' not in st.session_state:
     st.session_state.monthly_goals = pd.DataFrame([
         {"Goal": "C언어 포인터 완벽 이해", "Done": True},
         {"Goal": "매일 아침 1시간 코딩", "Done": False},
         {"Goal": "전공 서적 1권 완독", "Done": False}
     ])
-
-if 'weekly_tasks' not in st.session_state:
     st.session_state.weekly_tasks = pd.DataFrame([
         {"Day": "Mon", "Task": "자료구조 강의", "Done": True},
         {"Day": "Tue", "Task": "알고리즘 풀이", "Done": True},
@@ -300,44 +435,34 @@ if 'weekly_tasks' not in st.session_state:
         {"Day": "Thu", "Task": "프로젝트", "Done": False},
         {"Day": "Fri", "Task": "스터디", "Done": False}
     ])
-
-if 'daily_time_logs' not in st.session_state:
     st.session_state.daily_time_logs = pd.DataFrame([
         {"StartTime": "09:00", "EndTime": "11:00", "Activity": "자료구조", "Category": "Study"},
         {"StartTime": "14:00", "EndTime": "16:00", "Activity": "코딩", "Category": "Practice"}
     ])
-
-if 'study_sessions' not in st.session_state:
     st.session_state.study_sessions = pd.DataFrame([
         {"Name": "알고리즘", "Total": 10, "Done": 8},
         {"Name": "정보처리기사", "Total": 12, "Done": 3}
     ])
-
-if 'project_data' not in st.session_state:
     st.session_state.project_data = pd.DataFrame([
         {"Subject": "캡스톤1", "Task": "기획안", "Total": 5, "Done": 5, "Deadline": "2026-03-15"},
         {"Subject": "자료구조", "Task": "연결리스트", "Total": 8, "Done": 2, "Deadline": "2026-03-20"}
     ])
-
-if 'daily_memo' not in st.session_state:
     st.session_state.daily_memo = ""
-
-# 습관 트래커 데이터
-if 'habits' not in st.session_state:
     st.session_state.habits = pd.DataFrame([
-        {"Name": "아침 운동", "Icon": "🏃", "Target": 7},  # 주 7회 목표
+        {"Name": "아침 운동", "Icon": "🏃", "Target": 7},
         {"Name": "독서 30분", "Icon": "📚", "Target": 5},
         {"Name": "물 2L 마시기", "Icon": "💧", "Target": 7}
     ])
-
-if 'habit_logs' not in st.session_state:
-    # 오늘 날짜 기준 최근 7일 로그
-    from datetime import datetime, timedelta
     today = datetime.now().date()
-    st.session_state.habit_logs = {}  # {habit_name: [날짜 리스트]}
-    st.session_state.habit_logs["아침 운동"] = [str(today - timedelta(days=i)) for i in [1, 2, 4, 5]]
-    st.session_state.habit_logs["독서 30분"] = [str(today - timedelta(days=i)) for i in [0, 1, 3]]
-    st.session_state.habit_logs["물 2L 마시기"] = [str(today - timedelta(days=i)) for i in [0, 1, 2, 3, 4, 5, 6]]
+    st.session_state.habit_logs = {
+        "아침 운동": [str(today - timedelta(days=i)) for i in [1, 2, 4, 5]],
+        "독서 30분": [str(today - timedelta(days=i)) for i in [0, 1, 3]],
+        "물 2L 마시기": [str(today - timedelta(days=i)) for i in [0, 1, 2, 3, 4, 5, 6]]
+    }
+
+    # 2단계: 구글 시트에서 데이터 덮어쓰기 시도
+    sync_load_data()
+
 
 # ---------------------------------------------------------
 # 4. 차트 생성 함수 (대시보드용)
@@ -469,6 +594,7 @@ with menu[1]:
                 checked = cols[i%2].checkbox(sub, value=done, key=f"sem_{sem}_{sub}")
                 if checked != done:
                     st.session_state.semester_progress[sem][sub] = checked
+                    sync_save_data()
                     st.rerun()
 
 # === [3] 월간 관리 ===
@@ -486,6 +612,7 @@ with menu[2]:
             if st.button("등록하기", use_container_width=True, key="m_save"):
                 if new_goal:
                     st.session_state.monthly_goals = pd.concat([st.session_state.monthly_goals, pd.DataFrame([{"Goal":new_goal, "Done":False}])], ignore_index=True)
+                    sync_save_data()
                     st.rerun()
 
     if show_manage:
@@ -496,6 +623,7 @@ with menu[2]:
             # 여기가 바로 보라색 삭제 버튼이 적용되는 부분
             if c2.button("삭제", key=f"m_del_{i}"):
                 st.session_state.monthly_goals = st.session_state.monthly_goals.drop(i).reset_index(drop=True)
+                sync_save_data()
                 st.rerun()
     else:
         # 일반 보기 모드 - 체크박스로 완료 토글
@@ -503,6 +631,7 @@ with menu[2]:
             done = st.checkbox(f"🎯 {row['Goal']}", value=row['Done'], key=f"m_chk_{i}")
             if done != row['Done']:
                 st.session_state.monthly_goals.at[i, 'Done'] = done
+                sync_save_data()
                 st.rerun()
 
 # === [4] 주간 관리 ===
@@ -519,6 +648,7 @@ with menu[3]:
             t = st.text_input("할일 입력")
             if st.button("등록하기", use_container_width=True, key="w_save"):
                 st.session_state.weekly_tasks = pd.concat([st.session_state.weekly_tasks, pd.DataFrame([{"Day":d, "Task":t, "Done":False}])], ignore_index=True)
+                sync_save_data()
                 st.rerun()
                 
     if show_manage:
@@ -527,6 +657,7 @@ with menu[3]:
             c1.markdown(f"**{row['Day']}** : {row['Task']}")
             if c2.button("삭제", key=f"w_del_{i}"):
                 st.session_state.weekly_tasks = st.session_state.weekly_tasks.drop(i).reset_index(drop=True)
+                sync_save_data()
                 st.rerun()
     else:
         # 일반 보기 모드 - 체크박스로 완료 토글
@@ -534,6 +665,7 @@ with menu[3]:
             done = st.checkbox(f"📅 {row['Day']} : {row['Task']}", value=row['Done'], key=f"w_chk_{i}")
             if done != row['Done']:
                 st.session_state.weekly_tasks.at[i, 'Done'] = done
+                sync_save_data()
                 st.rerun()
 
 # === [5] 데일리 ===
@@ -551,6 +683,7 @@ with menu[4]:
             a = st.text_input("활동 내용")
             if st.button("기록하기", use_container_width=True):
                 st.session_state.daily_time_logs = pd.concat([st.session_state.daily_time_logs, pd.DataFrame([{"StartTime":s, "EndTime":e, "Activity":a, "Category":"Study"}])], ignore_index=True)
+                sync_save_data()
                 st.rerun()
                 
     if show_manage:
@@ -559,6 +692,7 @@ with menu[4]:
             c1.markdown(f"{row['StartTime']}~{row['EndTime']} : {row['Activity']}")
             if c2.button("삭제", key=f"d_del_{i}"):
                 st.session_state.daily_time_logs = st.session_state.daily_time_logs.drop(i).reset_index(drop=True)
+                sync_save_data()
                 st.rerun()
     else:
         # 일반 보기 모드 (카드 스타일)
@@ -566,7 +700,10 @@ with menu[4]:
             st.markdown(f"<div class='metric-card' style='padding:12px; display:flex; align-items:center;'><span style='font-size:1rem;'>⏰ <b>{row['StartTime']} ~ {row['EndTime']}</b> : {row['Activity']}</span></div>", unsafe_allow_html=True)
         
     st.markdown("#### 📓 Memo")
-    st.session_state.daily_memo = st.text_area("", st.session_state.daily_memo, height=150)
+    memo = st.text_area("", st.session_state.daily_memo, height=150)
+    if memo != st.session_state.daily_memo:
+        st.session_state.daily_memo = memo
+        sync_save_data()
 
 # === [6] 스터디 ===
 with menu[5]:
@@ -581,6 +718,7 @@ with menu[5]:
             t = st.number_input("목표 횟수", min_value=1, max_value=100, value=10)
             if st.button("생성하기", use_container_width=True):
                 st.session_state.study_sessions = pd.concat([st.session_state.study_sessions, pd.DataFrame([{"Name":n, "Total":int(t), "Done":0}])], ignore_index=True)
+                sync_save_data()
                 st.rerun()
                 
     if show_manage:
@@ -589,6 +727,7 @@ with menu[5]:
             c1.markdown(f"**{row['Name']}**")
             if c2.button("삭제", key=f"s_del_{i}"):
                 st.session_state.study_sessions = st.session_state.study_sessions.drop(i).reset_index(drop=True)
+                sync_save_data()
                 st.rerun()
     else:
         # 일반 보기 모드 - 진행률 조절 가능
@@ -600,14 +739,14 @@ with menu[5]:
             col2.markdown(f"<span style='color:{T['accent']}; font-weight:600;'>{int(row['Done'])}/{int(row['Total'])} ({pct}%)</span>", unsafe_allow_html=True)
             
             if col3.button("➖", key=f"s_minus_{i}"):
-                if st.session_state.study_sessions.at[i, 'Done'] > 0:
-                    st.session_state.study_sessions.at[i, 'Done'] -= 1
-                    st.rerun()
+                st.session_state.study_sessions.at[i, 'Done'] = max(0, row['Done'] - 1)
+                sync_save_data()
+                st.rerun()
             
             if col4.button("➕", key=f"s_plus_{i}"):
-                if st.session_state.study_sessions.at[i, 'Done'] < row['Total']:
-                    st.session_state.study_sessions.at[i, 'Done'] += 1
-                    st.rerun()
+                st.session_state.study_sessions.at[i, 'Done'] = min(row['Total'], row['Done'] + 1)
+                sync_save_data()
+                st.rerun()
             
             st.progress(pct / 100)
 
@@ -626,6 +765,7 @@ with menu[6]:
             d = st.date_input("마감일")
             if st.button("추가하기", use_container_width=True):
                 st.session_state.project_data = pd.concat([st.session_state.project_data, pd.DataFrame([{"Subject":s, "Task":t, "Total":int(total), "Done":0, "Deadline":str(d)}])], ignore_index=True)
+                sync_save_data()
                 st.rerun()
                 
     if show_manage:
@@ -634,6 +774,7 @@ with menu[6]:
             c1.markdown(f"**{row['Subject']}** : {row['Task']}")
             if c2.button("삭제", key=f"p_del_{i}"):
                 st.session_state.project_data = st.session_state.project_data.drop(i).reset_index(drop=True)
+                sync_save_data()
                 st.rerun()
     else:
         # 일반 보기 모드 - 진행률 조절 가능
@@ -647,14 +788,14 @@ with menu[6]:
             col2.markdown(f"<span style='color:{T['accent']}; font-weight:600;'>{done}/{total} ({pct}%)</span>", unsafe_allow_html=True)
             
             if col3.button("➖", key=f"p_minus_{i}"):
-                if st.session_state.project_data.at[i, 'Done'] > 0:
-                    st.session_state.project_data.at[i, 'Done'] -= 1
-                    st.rerun()
+                st.session_state.project_data.at[i, 'Done'] = max(0, done - 1)
+                sync_save_data()
+                st.rerun()
             
             if col4.button("➕", key=f"p_plus_{i}"):
-                if st.session_state.project_data.at[i, 'Done'] < total:
-                    st.session_state.project_data.at[i, 'Done'] += 1
-                    st.rerun()
+                st.session_state.project_data.at[i, 'Done'] = min(total, done + 1)
+                sync_save_data()
+                st.rerun()
             
             st.progress(pct / 100)
             st.caption(f"📅 마감: {row['Deadline']}")
@@ -679,6 +820,7 @@ with menu[7]:
                 if h_name:
                     st.session_state.habits = pd.concat([st.session_state.habits, pd.DataFrame([{"Name": h_name, "Icon": h_icon, "Target": int(h_target)}])], ignore_index=True)
                     st.session_state.habit_logs[h_name] = []
+                    sync_save_data()
                     st.rerun()
     
     if show_manage:
@@ -690,6 +832,7 @@ with menu[7]:
                 st.session_state.habits = st.session_state.habits.drop(i).reset_index(drop=True)
                 if habit_name in st.session_state.habit_logs:
                     del st.session_state.habit_logs[habit_name]
+                sync_save_data()
                 st.rerun()
     else:
         # 습관별 체크인 UI
@@ -751,6 +894,7 @@ with menu[7]:
                 else:
                     if today not in st.session_state.habit_logs[habit_name]:
                         st.session_state.habit_logs[habit_name].append(today)
+                sync_save_data()
                 st.rerun()
             
             # 스트릭 (최근 7일 - 클릭하여 토글 가능)
@@ -771,6 +915,7 @@ with menu[7]:
                             st.session_state.habit_logs[habit_name].remove(day_str)
                         else:
                             st.session_state.habit_logs[habit_name].append(day_str)
+                        sync_save_data()
                         st.rerun()
             
             st.progress(pct / 100)
