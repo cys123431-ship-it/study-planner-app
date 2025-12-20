@@ -2,494 +2,570 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
-from datetime import datetime, timedelta
+from datetime import datetime
 
 # ---------------------------------------------------------
 # 1. 페이지 설정
 # ---------------------------------------------------------
 st.set_page_config(
-    page_title="Navigators Study Manager",
+    page_title="Navigators Mobile",
     page_icon="🧭",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed" # 모바일 최적화를 위해 사이드바 접기
 )
 
 # ---------------------------------------------------------
-# 2. 테마 시스템 및 디자인
+# 2. 테마 시스템 (Light / Dark / Auto)
 # ---------------------------------------------------------
+# 테마 상태 관리
 if 'theme' not in st.session_state:
-    st.session_state.theme = 'auto'
+    st.session_state.theme = 'auto'  # auto, light, dark
 
-# 색상 팔레트 정의
+# 사이드바에 테마 선택 추가
+with st.sidebar:
+    st.markdown("### ⚙️ 설정")
+    theme_options = {"🌓 Auto (시스템)": "auto", "☀️ Light": "light", "🌙 Dark": "dark"}
+    selected = st.radio("테마 선택", list(theme_options.keys()), 
+                        index=list(theme_options.values()).index(st.session_state.theme),
+                        label_visibility="collapsed")
+    new_theme = theme_options[selected]
+    if new_theme != st.session_state.theme:
+        st.session_state.theme = new_theme
+        st.rerun()
+
+# 테마 팔레트 정의 (예시 이미지 기반)
 THEMES = {
     'light': {
-        'bg_main': '#f8f9fa',
-        'bg_sidebar': '#ffffff',
+        'bg_main': '#f8fafc',
         'bg_card': '#ffffff',
-        'text_primary': '#1a1a2e',
-        'text_secondary': '#6c757d',
-        'border': '#e0e0e0',
-        'card_shadow': 'rgba(0, 0, 0, 0.08)',
+        'text_primary': '#1e293b',
+        'text_secondary': '#64748b',
+        'accent': '#0d9488',  # Teal (예시1)
+        'accent_light': '#14b8a6',
+        'border': '#e2e8f0',
+        'chart_colors': ['#0d9488', '#64748b', '#94a3b8'],
     },
     'dark': {
-        'bg_main': '#0a0a12',
-        'bg_sidebar': '#121220',
-        'bg_card': '#1a1a2e', 
-        'text_primary': '#ffffff', 
-        'text_secondary': '#b0b0c0',
-        'border': '#3a3a5a',
-        'card_shadow': 'rgba(0, 0, 0, 0.4)',
+        'bg_main': '#0a1628',
+        'bg_card': 'rgba(15, 30, 60, 0.8)',
+        'text_primary': '#f1f5f9',
+        'text_secondary': '#94a3b8',
+        'accent': '#38bdf8',  # Sky Blue (예시2)
+        'accent_light': '#7dd3fc',
+        'border': 'rgba(56, 189, 248, 0.2)',
+        'chart_colors': ['#38bdf8', '#0ea5e9', '#0284c7'],
     }
 }
 
-ACCENT_COLOR = "#6C63FF"
-ACCENT_DARK = "#5449CC"
-
-def get_theme():
-    if st.session_state.theme == 'auto': return 'light'
+# 현재 테마 결정
+def get_current_theme():
+    if st.session_state.theme == 'auto':
+        return 'dark'  # 기본값 (JS로 감지 불가하여 dark 사용)
     return st.session_state.theme
 
-theme = get_theme()
-T = THEMES[theme]
+current = get_current_theme()
+T = THEMES[current]
+is_dark = current == 'dark'
 
-# ---------------------------------------------------------
-# [핵심 수정] CSS 스타일링
-# ---------------------------------------------------------
-# 다크 모드일 때 삭제 버튼 디자인을 이미지와 똑같이 강제 적용
-dark_mode_button_css = """
-    /* 다크모드 삭제 버튼 (마지막 컬럼의 버튼) 스타일 강제 적용 */
-    div[data-testid="column"]:last-child button {
-        background-color: #161622 !important;   /* 아주 어두운 남색 배경 */
-        color: #ffffff !important;              /* 완전 흰색 텍스트 */
-        border: 1px solid #3a3a5a !important;   /* 은은한 테두리 */
-        border-radius: 8px !important;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.3) !important;
-        font-weight: 700 !important;            /* 글자 굵게 */
-        letter-spacing: 0.5px !important;
-        transition: all 0.2s ease-in-out !important;
-    }
-    
-    /* 버튼 내부 텍스트(p태그)도 강제로 흰색 */
-    div[data-testid="column"]:last-child button p,
-    div[data-testid="column"]:last-child button div {
-        color: #ffffff !important;
-    }
+# 기존 코드 호환성 변수
+PURPLE_BTN = T['accent']
+CARD_BG = T['bg_card']
 
-    /* 호버 효과: 약간 밝아지며 텍스트에 붉은빛(삭제 경고) */
-    div[data-testid="column"]:last-child button:hover {
-        background-color: #1e1e2e !important;
-        border-color: #ff4b4b !important;
-        color: #ff4b4b !important;
-        transform: translateY(-2px) !important;
-        box-shadow: 0 0 15px rgba(255, 75, 75, 0.2) !important; /* 붉은 글로우 효과 */
-    }
-    
-    div[data-testid="column"]:last-child button:hover p {
-        color: #ff4b4b !important;
-    }
-"""
-
-light_mode_button_css = """
-    div[data-testid="column"]:last-child button {
-        background-color: #ffffff !important;
-        color: #000000 !important;
-        border: 1px solid #e0e0e0 !important;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.05) !important;
-    }
-    div[data-testid="column"]:last-child button:hover {
-        border-color: #ff4b4b !important;
-        color: #ff4b4b !important;
-        background-color: #fff5f5 !important;
-    }
-"""
-
-# 현재 테마에 맞는 버튼 CSS 선택
-current_button_css = dark_mode_button_css if theme == 'dark' else light_mode_button_css
-
+# CSS 생성
 st.markdown(f"""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
     
-    :root {{
-        --bg-main: {T['bg_main']};
-        --text-primary: {T['text_primary']};
+    /* ============================================ */
+    /* 기본 스타일 */
+    /* ============================================ */
+    html, body, .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {{
+        background: {T['bg_main']} !important;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     }}
     
-    /* 기본 배경 및 텍스트 설정 */
-    .stApp {{
-        background-color: {T['bg_main']} !important;
+    {"" if not is_dark else f'''
+    /* 다크모드 글로우 배경 효과 */
+    [data-testid="stAppViewContainer"]::before {{
+        content: "";
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: 
+            radial-gradient(ellipse 80% 60% at 30% 30%, rgba(56, 189, 248, 0.08) 0%, transparent 50%),
+            radial-gradient(ellipse 60% 50% at 70% 70%, rgba(14, 165, 233, 0.06) 0%, transparent 50%);
+        pointer-events: none;
+        z-index: -1;
+    }}
+    '''}
+    
+    h1, h2, h3, h4 {{
         color: {T['text_primary']} !important;
-        font-family: 'Inter', sans-serif;
+        font-weight: 700 !important;
     }}
     
-    /* 다크모드일 때 모든 텍스트 강제 흰색 (브라우저 기본값 덮어쓰기) */
-    {'p, span, h1, h2, h3, h4, label, .stMarkdown, .stMarkdown p { color: #ffffff !important; }' if theme == 'dark' else ''}
-
+    p, span, div, label {{
+        color: {T['text_primary']} !important;
+    }}
+    
+    /* ============================================ */
+    /* 카드 스타일 */
+    /* ============================================ */
+    .metric-card {{
+        background: {T['bg_card']};
+        {"backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);" if is_dark else ""}
+        border-radius: 16px;
+        padding: 20px;
+        border: 1px solid {T['border']};
+        {"box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255,255,255,0.05);" if is_dark else "box-shadow: 0 1px 3px rgba(0,0,0,0.08);"}
+        margin-bottom: 16px;
+        transition: all 0.3s ease;
+    }}
+    
+    .metric-card:hover {{
+        {"border-color: " + T['accent'] + "; box-shadow: 0 0 30px rgba(56, 189, 248, 0.15);" if is_dark else "box-shadow: 0 4px 12px rgba(0,0,0,0.1);"}
+        transform: translateY(-2px);
+    }}
+    
+    /* ============================================ */
+    /* 버튼 스타일 */
+    /* ============================================ */
+    div[data-testid="column"] button {{
+        background: {T['accent']} !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 12px !important;
+        height: 48px !important;
+        font-weight: 600 !important;
+        font-size: 0.95rem !important;
+        width: 100% !important;
+        {"box-shadow: 0 4px 15px rgba(56, 189, 248, 0.3);" if is_dark else "box-shadow: 0 2px 8px rgba(13, 148, 136, 0.2);"}
+        transition: all 0.2s ease !important;
+    }}
+    
+    div[data-testid="column"] button:hover {{
+        background: {T['accent_light']} !important;
+        transform: translateY(-2px) !important;
+        {"box-shadow: 0 8px 25px rgba(56, 189, 248, 0.4) !important;" if is_dark else "box-shadow: 0 4px 12px rgba(13, 148, 136, 0.3) !important;"}
+    }}
+    
+    /* ============================================ */
+    /* 입력 필드 */
+    /* ============================================ */
+    .stTextInput input, .stSelectbox div[data-baseweb="select"], .stNumberInput input, .stTextArea textarea {{
+        background: {"rgba(15, 30, 60, 0.6)" if is_dark else "#ffffff"} !important;
+        color: {T['text_primary']} !important;
+        border: 1px solid {T['border']} !important;
+        border-radius: 10px !important;
+    }}
+    
+    .stTextInput input:focus {{
+        border-color: {T['accent']} !important;
+        {"box-shadow: 0 0 15px rgba(56, 189, 248, 0.2) !important;" if is_dark else ""}
+    }}
+    
+    /* ============================================ */
+    /* 탭 스타일 */
+    /* ============================================ */
+    .stTabs [data-baseweb="tab-list"] {{
+        gap: 6px;
+        background: {"rgba(15, 30, 60, 0.5)" if is_dark else "#f1f5f9"};
+        padding: 6px;
+        border-radius: 14px;
+        {"backdrop-filter: blur(10px);" if is_dark else ""}
+    }}
+    
+    .stTabs [data-baseweb="tab"] {{
+        background: transparent;
+        border-radius: 10px;
+        padding: 10px 16px;
+        border: none;
+        color: {T['text_secondary']} !important;
+        font-weight: 500;
+        transition: all 0.2s ease;
+    }}
+    
+    .stTabs [data-baseweb="tab"]:hover {{
+        background: {"rgba(56, 189, 248, 0.1)" if is_dark else "rgba(13, 148, 136, 0.08)"};
+        color: {T['text_primary']} !important;
+    }}
+    
+    .stTabs [aria-selected="true"] {{
+        background: {T['accent']} !important;
+        color: white !important;
+        {"box-shadow: 0 4px 15px rgba(56, 189, 248, 0.3);" if is_dark else ""}
+    }}
+    
+    /* ============================================ */
     /* 사이드바 */
+    /* ============================================ */
     section[data-testid="stSidebar"] {{
-        background-color: {T['bg_sidebar']} !important;
+        background: {"#0f1e3c" if is_dark else "#ffffff"} !important;
         border-right: 1px solid {T['border']};
     }}
-    section[data-testid="stSidebar"] p, section[data-testid="stSidebar"] span {{
+    
+    section[data-testid="stSidebar"] * {{
         color: {T['text_primary']} !important;
     }}
     
-    /* 메뉴(라디오 버튼) 스타일 */
-    .stRadio > div > label {{
-        background: {T['bg_card']};
-        padding: 12px 16px;
-        border-radius: 10px;
-        margin-bottom: 4px;
-        border: 1px solid transparent;
-        transition: all 0.2s;
-    }}
-    .stRadio > div > label:hover {{
-        border-color: {ACCENT_COLOR};
-    }}
-    .stRadio > div > label[data-checked="true"] {{
-        background: linear-gradient(135deg, {ACCENT_COLOR}, {ACCENT_DARK});
-        color: white !important;
-    }}
-    .stRadio > div > label[data-checked="true"] span {{
-        color: white !important;
-    }}
-
-    /* 카드 스타일 */
-    .card {{
-        background-color: {T['bg_card']};
-        border: 1px solid {T['border']};
-        border-radius: 12px;
-        padding: 16px;
-        margin-bottom: 12px;
-        box-shadow: 0 4px 6px {T['card_shadow']};
-    }}
-    
-    /* 메인 버튼 스타일 */
-    .stButton > button {{
-        background: {ACCENT_COLOR};
-        color: white !important;
-        border: none;
-        height: 45px;
-        font-weight: 600;
-        border-radius: 8px;
-    }}
-
-    /* 데이터프레임 및 인풋 필드 */
-    [data-testid="stDataFrame"], .stTextInput input, .stSelectbox div[data-baseweb="select"] {{
-        background-color: {T['bg_card']} !important;
+    /* ============================================ */
+    /* 체크박스 */
+    /* ============================================ */
+    .stCheckbox label span {{
         color: {T['text_primary']} !important;
-        border-color: {T['border']} !important;
     }}
     
-    /* 삭제 버튼 스타일 주입 (가장 마지막에 적용) */
-    {current_button_css}
+    /* ============================================ */
+    /* 스크롤바 */
+    /* ============================================ */
+    ::-webkit-scrollbar {{ width: 8px; height: 8px; }}
+    ::-webkit-scrollbar-track {{ background: {"#0a1628" if is_dark else "#f1f5f9"}; }}
+    ::-webkit-scrollbar-thumb {{ 
+        background: {T['accent']};
+        border-radius: 4px;
+    }}
+    
+    /* 선택 색상 */
+    ::selection {{
+        background: {T['accent']};
+        color: white;
+    }}
     
     </style>
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 3. 데이터 (Session State)
+# 3. 데이터 초기화 (모든 과목 포함)
 # ---------------------------------------------------------
-if 'project_data' not in st.session_state:
-    st.session_state.project_data = pd.DataFrame([
-        {"Subject": "캡스톤디자인1", "Task": "주제 선정 및 기획안 작성", "Done": True, "Deadline": "2026-03-15", "Priority": "High"},
-        {"Subject": "자료구조", "Task": "연결 리스트 구현 실습", "Done": False, "Deadline": "2026-03-20", "Priority": "Medium"},
-        {"Subject": "개인공부", "Task": "정보처리기사 실기 기출 1회독", "Done": False, "Deadline": "2026-04-15", "Priority": "High"},
-    ])
+if 'semester_progress' not in st.session_state:
+    st.session_state.semester_progress = {
+        "1-1 (2026 Spring)": {
+            "기초C프로그래밍": True, "컴퓨터구조": False, "자바프로그래밍": False, 
+            "데이터통신": False, "자료구조(Core)": False, "캡스톤디자인1": False
+        },
+        "1-2 (2026 Fall)": {
+            "데이터베이스(Core)": False, "정보보호학개론": False, "운영체제": False, 
+            "논리회로": False, "소프트웨어공학": False, "캡스톤디자인2": False
+        },
+        "2-1 (2027 Spring)": {
+            "네트워크보안": False, "컴퓨터네트워크": False, "운영체제보안": False, 
+            "진로지도": False, "데이터베이스보안": False
+        },
+        "2-2 (2027 Fall)": {
+            "네트워크보안": False, "컴퓨터네트워크": False, "운영체제보안": False, 
+            "진로지도": False, "데이터베이스보안": False, # (스크린샷상 중복된 항목이 있어 보이나 그대로 반영)
+            "알고리즘(7급)": False, "졸업지도": False, "리눅스보안": False, "SW취약점분석": False
+        }
+    }
+# (중복 키 방지를 위해 2-2 데이터 정리)
+st.session_state.semester_progress["2-2 (2027 Fall)"] = {
+    "알고리즘(7급)": False, "졸업지도": False, "리눅스보안": False, "SW취약점분석": False
+}
 
 if 'monthly_goals' not in st.session_state:
     st.session_state.monthly_goals = pd.DataFrame([
         {"Goal": "C언어 포인터 완벽 이해", "Done": True},
         {"Goal": "매일 아침 1시간 코딩", "Done": False},
-        {"Goal": "전공 서적 1권 완독", "Done": False},
+        {"Goal": "전공 서적 1권 완독", "Done": False}
     ])
 
 if 'weekly_tasks' not in st.session_state:
     st.session_state.weekly_tasks = pd.DataFrame([
-        {"Day": "Mon", "Task": "자료구조 강의 수강", "Done": True},
-        {"Day": "Tue", "Task": "알고리즘 문제 3개 풀기", "Done": True},
-        {"Day": "Wed", "Task": "정처기 요약본 암기", "Done": False},
-        {"Day": "Thu", "Task": "프로젝트 코드 리팩토링", "Done": False},
-        {"Day": "Fri", "Task": "주간 복습", "Done": False},
+        {"Day": "Mon", "Task": "자료구조 강의", "Done": True},
+        {"Day": "Tue", "Task": "알고리즘 풀이", "Done": True},
+        {"Day": "Wed", "Task": "복습", "Done": False},
+        {"Day": "Thu", "Task": "프로젝트", "Done": False},
+        {"Day": "Fri", "Task": "스터디", "Done": False}
     ])
 
 if 'daily_time_logs' not in st.session_state:
     st.session_state.daily_time_logs = pd.DataFrame([
-        {"StartTime": "09:00", "EndTime": "11:00", "Activity": "자료구조 인강", "Category": "Study"},
-        {"StartTime": "14:00", "EndTime": "17:00", "Activity": "코딩 실습", "Category": "Practice"},
+        {"StartTime": "09:00", "EndTime": "11:00", "Activity": "자료구조", "Category": "Study"},
+        {"StartTime": "14:00", "EndTime": "16:00", "Activity": "코딩", "Category": "Practice"}
     ])
 
 if 'study_sessions' not in st.session_state:
     st.session_state.study_sessions = pd.DataFrame([
-        {"Name": "알고리즘 스터디", "Schedule": "매주 화요일 19:00", "TotalSessions": 10, "CompletedSessions": 8, "Status": "Active"},
-        {"Name": "정처기 스터디", "Schedule": "매주 목요일 20:00", "TotalSessions": 12, "CompletedSessions": 3, "Status": "Active"},
+        {"Name": "알고리즘", "Total": 10, "Done": 8},
+        {"Name": "정보처리기사", "Total": 12, "Done": 3}
     ])
 
-if 'semester_progress' not in st.session_state:
-    st.session_state.semester_progress = {
-        "1-1 (2026 Spring)": {"기초C프로그래밍": False, "자바프로그래밍": False, "자료구조(Core)": False, "컴퓨터구조": False, "데이터통신": False, "캡스톤디자인1": False},
-        "1-2 (2026 Fall)": {"데이터베이스(Core)": False, "운영체제": False, "소프트웨어공학": False, "정보보호학개론": False, "논리회로": False, "캡스톤디자인2": False},
-        "2-1 (2027 Spring)": {"네트워크보안": False, "운영체제보안": False, "데이터베이스보안": False, "컴퓨터네트워크": False, "진로지도": False},
-        "2-2 (2027 Fall)": {"알고리즘(7급)": False, "리눅스보안": False, "SW취약점분석": False, "졸업지도": False}
-    }
+if 'project_data' not in st.session_state:
+    st.session_state.project_data = pd.DataFrame([
+        {"Subject": "캡스톤1", "Task": "기획안", "Done": True, "Deadline": "2026-03-15"},
+        {"Subject": "자료구조", "Task": "연결리스트", "Done": False, "Deadline": "2026-03-20"}
+    ])
+
 if 'daily_memo' not in st.session_state:
     st.session_state.daily_memo = ""
 
 # ---------------------------------------------------------
-# 4. 사이드바 UI
+# 4. 차트 생성 함수 (대시보드용)
 # ---------------------------------------------------------
-with st.sidebar:
-    st.markdown(f"<h1 style='text-align:center; color:{T['text_primary']}'>🧭 Navigators</h1>", unsafe_allow_html=True)
-    st.markdown(f"<p style='text-align:center; color:{T['text_secondary']}; font-size:0.8rem'>CS Transfer Student</p>", unsafe_allow_html=True)
+def draw_pie_chart(done, total, title):
+    if total == 0: total = 1
+    fig = go.Figure(data=[go.Pie(
+        values=[done, total-done],
+        hole=0.7,
+        marker=dict(colors=[PURPLE_BTN, '#2f2f3d']),
+        textinfo='none',
+        hoverinfo='label+percent'
+    )])
+    fig.update_layout(
+        showlegend=False,
+        margin=dict(t=0, b=0, l=0, r=0),
+        height=120,
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        annotations=[dict(text=f"{int(done/total*100)}%", x=0.5, y=0.5, font_size=16, font_color='white', showarrow=False)]
+    )
+    return fig
+
+def draw_bar_chart(df, x_col, y_col, title):
+    fig = px.bar(df, x=x_col, y=y_col, color=y_col, 
+                 color_discrete_sequence=[PURPLE_BTN])
+    fig.update_layout(
+        showlegend=False,
+        margin=dict(t=0, b=0, l=0, r=0),
+        height=120,
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        xaxis=dict(showgrid=False, tickfont=dict(color='white', size=10)),
+        yaxis=dict(showgrid=False, showticklabels=False)
+    )
+    return fig
+
+# ---------------------------------------------------------
+# 5. UI 구성
+# ---------------------------------------------------------
+# 사이드바 대신 상단 네비게이션 (모바일 친화적)
+st.markdown("<h2 style='text-align:center; margin-bottom:10px;'>🧭 Navigators</h2>", unsafe_allow_html=True)
+menu = st.tabs(["📊 대시보드", "📚 학기", "📅 월간", "📆 주간", "📝 데일리", "👥 스터디", "💼 프로젝트"])
+
+# === [1] 대시보드 (통합 그래프) ===
+with menu[0]:
+    st.markdown("### 📊 Overall Progress")
     
-    # 테마 선택
-    st.write("🎨 Theme")
-    theme_options = {"🌙 Dark": "dark", "☀️ Light": "light", "🔄 Auto": "auto"}
-    curr_theme_idx = list(theme_options.values()).index(st.session_state.theme)
-    sel = st.radio("Theme", list(theme_options.keys()), index=curr_theme_idx, label_visibility="collapsed")
+    # Grid Layout for Mobile (2 columns per row)
+    row1_c1, row1_c2 = st.columns(2)
     
-    if theme_options[sel] != st.session_state.theme:
-        st.session_state.theme = theme_options[sel]
-        st.rerun()
+    # 1. 학기 달성률
+    with row1_c1:
+        st.markdown(f"<div class='metric-card'><div style='text-align:center; margin-bottom:5px'>📚 학기 이수율</div>", unsafe_allow_html=True)
+        total_sub = sum(len(v) for v in st.session_state.semester_progress.values())
+        done_sub = sum(sum(1 for x in v.values() if x) for v in st.session_state.semester_progress.values())
+        st.plotly_chart(draw_pie_chart(done_sub, total_sub, "Semester"), use_container_width=True)
+        st.markdown("</div>", unsafe_allow_html=True)
         
-    st.divider()
+    # 2. 월간 달성률
+    with row1_c2:
+        st.markdown(f"<div class='metric-card'><div style='text-align:center; margin-bottom:5px'>📅 이번달 목표</div>", unsafe_allow_html=True)
+        m_df = st.session_state.monthly_goals
+        st.plotly_chart(draw_pie_chart(len(m_df[m_df['Done']]), len(m_df), "Monthly"), use_container_width=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+    row2_c1, row2_c2 = st.columns(2)
     
-    # D-Day
-    d_day = (datetime(2026, 4, 15) - datetime.now()).days
-    st.markdown(f"""
-        <div style="background: linear-gradient(135deg, {ACCENT_COLOR}, {ACCENT_DARK}); padding: 15px; border-radius: 12px; text-align: center; color: white;">
-            <div style="font-size: 0.8rem; opacity: 0.9">📅 정보처리기사 실기</div>
-            <div style="font-size: 1.8rem; font-weight: 800">D-{d_day}</div>
-        </div>
-    """, unsafe_allow_html=True)
-    
-    st.divider()
-    menu = st.radio("Menu", ["📚 Semester", "📅 Monthly", "📆 Weekly", "📝 Daily", "👥 Study", "💼 Project"], label_visibility="collapsed")
+    # 3. 주간 달성률
+    with row2_c1:
+        st.markdown(f"<div class='metric-card'><div style='text-align:center; margin-bottom:5px'>📆 주간 할일</div>", unsafe_allow_html=True)
+        w_df = st.session_state.weekly_tasks
+        st.plotly_chart(draw_pie_chart(len(w_df[w_df['Done']]), len(w_df), "Weekly"), use_container_width=True)
+        st.markdown("</div>", unsafe_allow_html=True)
 
-# ---------------------------------------------------------
-# 5. 메인 콘텐츠
-# ---------------------------------------------------------
-
-# === [1] Semester ===
-if menu == "📚 Semester":
-    st.title("📚 2-Year Curriculum")
-    total = sum(len(v) for v in st.session_state.semester_progress.values())
-    done = sum(sum(1 for x in v.values() if x) for v in st.session_state.semester_progress.values())
+    # 4. 데일리 공부시간 (Bar Chart)
+    with row2_c2:
+        st.markdown(f"<div class='metric-card'><div style='text-align:center; margin-bottom:5px'>📝 오늘 공부</div>", unsafe_allow_html=True)
+        # 간단히 총 시간만 퍼센트로 시각화 (목표 6시간 가정)
+        d_df = st.session_state.daily_time_logs
+        total_min = 0
+        for _, r in d_df.iterrows():
+            try:
+                t1 = datetime.strptime(r['StartTime'], "%H:%M")
+                t2 = datetime.strptime(r['EndTime'], "%H:%M")
+                total_min += (t2-t1).seconds//60
+            except: pass
+        st.plotly_chart(draw_pie_chart(total_min, 360, "Daily"), use_container_width=True) # 6시간 기준
+        st.markdown(f"<div style='text-align:center; font-size:0.8rem'>{total_min//60}h {total_min%60}m</div></div>", unsafe_allow_html=True)
+        
+    row3_c1, row3_c2 = st.columns(2)
     
-    st.markdown(f"""
-        <div style="background:linear-gradient(135deg, {ACCENT_COLOR}, {ACCENT_DARK}); padding:20px; border-radius:16px; text-align:center; color:white; box-shadow: 0 4px 15px rgba(108, 99, 255, 0.3);">
-            <h2 style="margin:0; font-size:2.5rem; color:white !important;">{int(done/total*100)}%</h2>
-            <p style="margin:0; opacity:0.9; color:white !important;">전체 이수율 ({done}/{total})</p>
-        </div>
-        <br>
-    """, unsafe_allow_html=True)
-    
-    for sem, sub in st.session_state.semester_progress.items():
-        s_done = sum(1 for v in sub.values() if v)
-        with st.expander(f"{sem} — {int(s_done/len(sub)*100)}%"):
-            cols = st.columns(3)
-            for i, (k, v) in enumerate(sub.items()):
-                st.session_state.semester_progress[sem][k] = cols[i%3].checkbox(k, value=v, key=f"{sem}_{k}")
-
-# === [2] Monthly ===
-elif menu == "📅 Monthly":
-    st.title(f"📅 {datetime.now().strftime('%B %Y')}")
-    df = st.session_state.monthly_goals
-    done = len(df[df['Done']])
-    
-    c1, c2 = st.columns([1, 2])
-    with c1:
-        fig = go.Figure(data=[go.Pie(values=[done, len(df)-done], hole=0.75, marker_colors=[ACCENT_COLOR, T['border']], textinfo='none')])
-        fig.update_layout(showlegend=False, margin=dict(t=0,b=0,l=0,r=0), height=180, paper_bgcolor='rgba(0,0,0,0)')
+    # 5. 스터디 (Bar Chart)
+    with row3_c1:
+        st.markdown(f"<div class='metric-card'><div style='text-align:center; margin-bottom:5px'>👥 스터디</div>", unsafe_allow_html=True)
+        s_df = st.session_state.study_sessions
+        fig = px.bar(s_df, x='Name', y='Done', range_y=[0, 15])
+        fig.update_layout(showlegend=False, margin=dict(t=0,b=0,l=0,r=0), height=120, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color='white'), xaxis=dict(showticklabels=False))
+        fig.update_traces(marker_color=PURPLE_BTN)
         st.plotly_chart(fig, use_container_width=True)
-    
-    with c2:
-        c_a, c_b = st.columns(2)
-        add = c_a.toggle("➕ 추가", key="m_add")
-        manage = c_b.toggle("⚙️ 관리", key="m_man")
+        st.markdown("</div>", unsafe_allow_html=True)
         
-        if add:
-            with st.form("new_month"):
-                g = st.text_input("목표")
-                if st.form_submit_button("등록") and g:
-                    st.session_state.monthly_goals = pd.concat([df, pd.DataFrame([{"Goal": g, "Done": False}])], ignore_index=True)
-                    st.rerun()
-        
-        if manage:
-            st.info("🗑️ 삭제 버튼을 눌러 항목을 제거하세요.")
-            for i, r in df.iterrows():
-                mc1, mc2 = st.columns([4, 1])
-                mc1.markdown(f"**{r['Goal']}**")
-                # 여기서 CSS가 적용된 삭제 버튼이 렌더링됨
-                if mc2.button("삭제", key=f"md_{i}", use_container_width=True):
-                    st.session_state.monthly_goals = df.drop(i).reset_index(drop=True)
-                    st.rerun()
-        else:
-            st.session_state.monthly_goals = st.data_editor(df, column_config={"Done": st.column_config.CheckboxColumn(width="small")}, hide_index=True, use_container_width=True)
+    # 6. 프로젝트 (Pie Chart)
+    with row3_c2:
+        st.markdown(f"<div class='metric-card'><div style='text-align:center; margin-bottom:5px'>💼 프로젝트</div>", unsafe_allow_html=True)
+        p_df = st.session_state.project_data
+        st.plotly_chart(draw_pie_chart(len(p_df[p_df['Done']]), len(p_df), "Project"), use_container_width=True)
+        st.markdown("</div>", unsafe_allow_html=True)
 
-# === [3] Weekly ===
-elif menu == "📆 Weekly":
-    st.title("📆 Weekly Tasks")
-    df = st.session_state.weekly_tasks
-    done_cnt = len(df[df['Done']])
-    
-    # Metrics
-    c1, c2, c3 = st.columns(3)
-    c1.metric("진행률", f"{int(done_cnt/len(df)*100 if len(df) else 0)}%")
-    c2.metric("완료", done_cnt)
-    c3.metric("미완료", len(df)-done_cnt)
-    
-    st.divider()
-    
-    wa, wb = st.columns(2)
-    add = wa.toggle("➕ 추가", key="w_add")
-    manage = wb.toggle("⚙️ 관리", key="w_man")
-    
-    if add:
-        with st.form("new_week"):
-            col_a, col_b = st.columns([1, 3])
-            d = col_a.selectbox("요일", ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"])
-            t = col_b.text_input("할일")
-            if st.form_submit_button("등록") and t:
-                st.session_state.weekly_tasks = pd.concat([df, pd.DataFrame([{"Day": d, "Task": t, "Done": False}])], ignore_index=True)
-                st.rerun()
+# === [2] 학기 관리 ===
+with menu[1]:
+    st.markdown("### 📚 Semester Curriculum")
+    for sem, subjects in st.session_state.semester_progress.items():
+        with st.expander(sem, expanded=True):
+            cols = st.columns(2)
+            for i, (sub, done) in enumerate(subjects.items()):
+                st.session_state.semester_progress[sem][sub] = cols[i%2].checkbox(sub, value=done)
 
-    if manage:
-        st.info("🗑️ 삭제 버튼을 눌러 항목을 제거하세요.")
-        for i, r in df.iterrows():
-            wc1, wc2, wc3 = st.columns([1, 4, 1])
-            wc1.write(r['Day'])
-            wc2.write(r['Task'])
-            if wc3.button("삭제", key=f"wd_{i}", use_container_width=True):
-                st.session_state.weekly_tasks = df.drop(i).reset_index(drop=True)
+# === [3] 월간 관리 ===
+with menu[2]:
+    st.markdown("### 📅 Monthly Goals")
+    
+    # 토글 스위치 (추가 / 관리)
+    col_t1, col_t2 = st.columns(2)
+    show_add = col_t1.toggle("➕ 추가", key="m_add_t")
+    show_manage = col_t2.toggle("⚙️ 관리", key="m_man_t")
+    
+    if show_add:
+        with st.container(border=True):
+            new_goal = st.text_input("목표 입력", key="m_input")
+            if st.button("등록하기", use_container_width=True, key="m_save"):
+                if new_goal:
+                    st.session_state.monthly_goals = pd.concat([st.session_state.monthly_goals, pd.DataFrame([{"Goal":new_goal, "Done":False}])], ignore_index=True)
+                    st.rerun()
+
+    if show_manage:
+        st.warning("항목을 삭제하려면 아래 버튼을 누르세요.")
+        for i, row in st.session_state.monthly_goals.iterrows():
+            c1, c2 = st.columns([3, 1])
+            c1.markdown(f"#### {row['Goal']}")
+            # 여기가 바로 보라색 삭제 버튼이 적용되는 부분
+            if c2.button("삭제", key=f"m_del_{i}"):
+                st.session_state.monthly_goals = st.session_state.monthly_goals.drop(i).reset_index(drop=True)
                 st.rerun()
     else:
-        st.session_state.weekly_tasks = st.data_editor(
-            df, 
-            column_config={
-                "Done": st.column_config.CheckboxColumn(width="small"),
-                "Day": st.column_config.SelectboxColumn(options=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"], width="small")
-            }, 
-            hide_index=True, 
-            use_container_width=True
-        )
+        # 일반 보기 모드
+        for i, row in st.session_state.monthly_goals.iterrows():
+            st.markdown(f"<div class='metric-card' style='padding:10px; display:flex; align-items:center;'><span style='font-size:1.1rem; margin-right:10px;'>{'✅' if row['Done'] else '⬜'}</span> {row['Goal']}</div>", unsafe_allow_html=True)
 
-# === [4] Daily ===
-elif menu == "📝 Daily":
-    st.title("📝 Daily Log")
-    df = st.session_state.daily_time_logs
+# === [4] 주간 관리 ===
+with menu[3]:
+    st.markdown("### 📆 Weekly Tasks")
     
-    da, db = st.columns(2)
-    add = da.toggle("➕ 기록", key="d_add")
-    manage = db.toggle("⚙️ 관리", key="d_man")
+    col_t1, col_t2 = st.columns(2)
+    show_add = col_t1.toggle("➕ 추가", key="w_add_t")
+    show_manage = col_t2.toggle("⚙️ 관리", key="w_man_t")
     
-    if add:
-        with st.form("new_log"):
+    if show_add:
+        with st.container(border=True):
+            d = st.selectbox("요일", ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"])
+            t = st.text_input("할일 입력")
+            if st.button("등록하기", use_container_width=True, key="w_save"):
+                st.session_state.weekly_tasks = pd.concat([st.session_state.weekly_tasks, pd.DataFrame([{"Day":d, "Task":t, "Done":False}])], ignore_index=True)
+                st.rerun()
+                
+    if show_manage:
+        for i, row in st.session_state.weekly_tasks.iterrows():
+            c1, c2 = st.columns([3, 1])
+            c1.markdown(f"**{row['Day']}** : {row['Task']}")
+            if c2.button("삭제", key=f"w_del_{i}"):
+                st.session_state.weekly_tasks = st.session_state.weekly_tasks.drop(i).reset_index(drop=True)
+                st.rerun()
+    else:
+        # 일반 보기 모드 (카드 스타일)
+        for i, row in st.session_state.weekly_tasks.iterrows():
+            st.markdown(f"<div class='metric-card' style='padding:12px; display:flex; align-items:center; justify-content:space-between;'><span style='font-size:1.1rem;'>{'✅' if row['Done'] else '⬜'} <b>{row['Day']}</b> : {row['Task']}</span></div>", unsafe_allow_html=True)
+
+# === [5] 데일리 ===
+with menu[4]:
+    st.markdown("### 📝 Daily Log")
+    col_t1, col_t2 = st.columns(2)
+    show_add = col_t1.toggle("➕ 추가", key="d_add_t")
+    show_manage = col_t2.toggle("⚙️ 관리", key="d_man_t")
+    
+    if show_add:
+        with st.container(border=True):
             c1, c2 = st.columns(2)
             s = c1.text_input("시작", "09:00")
             e = c2.text_input("종료", "11:00")
-            a = st.text_input("활동")
-            cat = st.selectbox("분류", ["Study", "Practice", "Project"])
-            if st.form_submit_button("저장") and a:
-                st.session_state.daily_time_logs = pd.concat([df, pd.DataFrame([{"StartTime":s, "EndTime":e, "Activity":a, "Category":cat}])], ignore_index=True)
+            a = st.text_input("활동 내용")
+            if st.button("기록하기", use_container_width=True):
+                st.session_state.daily_time_logs = pd.concat([st.session_state.daily_time_logs, pd.DataFrame([{"StartTime":s, "EndTime":e, "Activity":a, "Category":"Study"}])], ignore_index=True)
                 st.rerun()
                 
-    if manage:
-        st.info("🗑️ 삭제 버튼을 눌러 항목을 제거하세요.")
-        for i, r in df.iterrows():
-            dc1, dc2, dc3 = st.columns([2, 4, 1])
-            dc1.write(f"{r['StartTime']}~{r['EndTime']}")
-            dc2.write(f"[{r['Category']}] {r['Activity']}")
-            if dc3.button("삭제", key=f"dd_{i}", use_container_width=True):
-                st.session_state.daily_time_logs = df.drop(i).reset_index(drop=True)
+    if show_manage:
+        for i, row in st.session_state.daily_time_logs.iterrows():
+            c1, c2 = st.columns([3, 1])
+            c1.markdown(f"{row['StartTime']}~{row['EndTime']} : {row['Activity']}")
+            if c2.button("삭제", key=f"d_del_{i}"):
+                st.session_state.daily_time_logs = st.session_state.daily_time_logs.drop(i).reset_index(drop=True)
                 st.rerun()
     else:
-        st.session_state.daily_time_logs = st.data_editor(df, hide_index=True, use_container_width=True)
+        # 일반 보기 모드 (카드 스타일)
+        for i, row in st.session_state.daily_time_logs.iterrows():
+            st.markdown(f"<div class='metric-card' style='padding:12px; display:flex; align-items:center;'><span style='font-size:1rem;'>⏰ <b>{row['StartTime']} ~ {row['EndTime']}</b> : {row['Activity']}</span></div>", unsafe_allow_html=True)
         
-    st.subheader("Today's Memo")
-    st.session_state.daily_memo = st.text_area("Memo", st.session_state.daily_memo, height=150)
+    st.markdown("#### 📓 Memo")
+    st.session_state.daily_memo = st.text_area("", st.session_state.daily_memo, height=150)
 
-# === [5] Study ===
-elif menu == "👥 Study":
-    st.title("👥 Study Sessions")
-    df = st.session_state.study_sessions
+# === [6] 스터디 ===
+with menu[5]:
+    st.markdown("### 👥 Study Groups")
+    col_t1, col_t2 = st.columns(2)
+    show_add = col_t1.toggle("➕ 추가", key="s_add_t")
+    show_manage = col_t2.toggle("⚙️ 관리", key="s_man_t")
     
-    for i, r in df.iterrows():
-        p = int(r['CompletedSessions']/r['TotalSessions']*100) if r['TotalSessions'] else 0
-        st.markdown(f"""
-            <div class="card">
-                <div style="display:flex; justify-content:space-between">
-                    <h3 style="margin:0">{r['Name']}</h3>
-                    <span style="background:{ACCENT_COLOR}30; color:{ACCENT_COLOR}; padding:2px 8px; border-radius:10px; font-size:0.8rem">{r['Status']}</span>
-                </div>
-                <p style="color:{T['text_secondary']}; margin:4px 0">{r['Schedule']}</p>
-                <div style="background:{T['border']}; height:8px; border-radius:4px; margin-top:8px">
-                    <div style="background:{ACCENT_COLOR}; width:{p}%; height:100%; border-radius:4px"></div>
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
-        
-    sa, sb = st.columns(2)
-    add = sa.toggle("➕ 추가", key="s_add")
-    manage = sb.toggle("⚙️ 관리", key="s_man")
-    
-    if add:
-        with st.form("new_study"):
-            n = st.text_input("이름")
-            sc = st.text_input("일정")
-            if st.form_submit_button("생성") and n:
-                st.session_state.study_sessions = pd.concat([df, pd.DataFrame([{"Name":n, "Schedule":sc, "TotalSessions":10, "CompletedSessions":0, "Status":"Active"}])], ignore_index=True)
+    if show_add:
+        with st.container(border=True):
+            n = st.text_input("스터디 이름")
+            if st.button("생성하기", use_container_width=True):
+                st.session_state.study_sessions = pd.concat([st.session_state.study_sessions, pd.DataFrame([{"Name":n, "Total":10, "Done":0}])], ignore_index=True)
                 st.rerun()
                 
-    if manage:
-        st.info("🗑️ 삭제 버튼을 눌러 항목을 제거하세요.")
-        for i, r in df.iterrows():
-            sc1, sc2, sc3 = st.columns([3, 3, 1])
-            sc1.write(r['Name'])
-            sc2.write(r['Schedule'])
-            if sc3.button("삭제", key=f"sd_{i}", use_container_width=True):
-                st.session_state.study_sessions = df.drop(i).reset_index(drop=True)
+    if show_manage:
+        for i, row in st.session_state.study_sessions.iterrows():
+            c1, c2 = st.columns([3, 1])
+            c1.markdown(f"**{row['Name']}**")
+            if c2.button("삭제", key=f"s_del_{i}"):
+                st.session_state.study_sessions = st.session_state.study_sessions.drop(i).reset_index(drop=True)
                 st.rerun()
     else:
-        st.session_state.study_sessions = st.data_editor(df, hide_index=True, use_container_width=True)
+        # 일반 보기 모드 (카드 스타일 + 진행률 바)
+        for i, row in st.session_state.study_sessions.iterrows():
+            pct = int(row['Done']/row['Total']*100) if row['Total'] > 0 else 0
+            st.markdown(f"""<div class='metric-card' style='padding:20px;'>
+                <div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;'>
+                    <span style='font-size:1.15rem; font-weight:700;'>📖 {row['Name']}</span>
+                    <span style='font-size:0.95rem; color:{T['accent']}; font-weight:600;'>{row['Done']}/{row['Total']} ({pct}%)</span>
+                </div>
+                <div style='background:{"rgba(10,20,40,0.8)" if is_dark else "#e2e8f0"}; height:12px; border-radius:8px; overflow:hidden;'>
+                    <div style='background:{T['accent']}; height:100%; border-radius:8px; width:{pct}%;'></div>
+                </div>
+            </div>""", unsafe_allow_html=True)
 
-# === [6] Project ===
-elif menu == "💼 Project":
-    st.title("💼 Projects")
-    df = st.session_state.project_data
+# === [7] 프로젝트 ===
+with menu[6]:
+    st.markdown("### 💼 Projects")
+    col_t1, col_t2 = st.columns(2)
+    show_add = col_t1.toggle("➕ 추가", key="p_add_t")
+    show_manage = col_t2.toggle("⚙️ 관리", key="p_man_t")
     
-    # Task Cards
-    for i, r in df.iterrows():
-        done_style = "opacity:0.6; text-decoration:line-through" if r['Done'] else ""
-        st.markdown(f"""
-            <div class="card" style="{done_style}">
-                <span style="background:{T['border']}; font-size:0.7rem; padding:2px 6px; border-radius:4px">{r['Priority']}</span>
-                <span style="float:right; font-weight:bold; color:{ACCENT_COLOR}">{r['Deadline']}</span>
-                <h4 style="margin:8px 0; color:{T['text_primary']}">{r['Subject']}</h4>
-                <p style="margin:0; color:{T['text_secondary']}">{r['Task']}</p>
-            </div>
-        """, unsafe_allow_html=True)
-        
-    pa, pb = st.columns(2)
-    add = pa.toggle("➕ 추가", key="p_add")
-    manage = pb.toggle("⚙️ 관리", key="p_man")
-    
-    if add:
-        with st.form("new_proj"):
-            s = st.text_input("과목")
+    if show_add:
+        with st.container(border=True):
+            s = st.text_input("과목명")
             t = st.text_input("할일")
-            if st.form_submit_button("추가") and s:
-                st.session_state.project_data = pd.concat([df, pd.DataFrame([{"Subject":s, "Task":t, "Done":False, "Deadline":"2026-12-31", "Priority":"Medium"}])], ignore_index=True)
+            if st.button("추가하기", use_container_width=True):
+                st.session_state.project_data = pd.concat([st.session_state.project_data, pd.DataFrame([{"Subject":s, "Task":t, "Done":False, "Deadline":"2026-03-20"}])], ignore_index=True)
                 st.rerun()
                 
-    if manage:
-        st.info("🗑️ 삭제 버튼을 눌러 항목을 제거하세요.")
-        for i, r in df.iterrows():
-            pc1, pc2, pc3 = st.columns([2, 4, 1])
-            pc1.write(r['Subject'])
-            pc2.write(r['Task'])
-            if pc3.button("삭제", key=f"pd_{i}", use_container_width=True):
-                st.session_state.project_data = df.drop(i).reset_index(drop=True)
+    if show_manage:
+        for i, row in st.session_state.project_data.iterrows():
+            c1, c2 = st.columns([3, 1])
+            c1.markdown(f"**{row['Subject']}** : {row['Task']}")
+            if c2.button("삭제", key=f"p_del_{i}"):
+                st.session_state.project_data = st.session_state.project_data.drop(i).reset_index(drop=True)
                 st.rerun()
     else:
-        st.session_state.project_data = st.data_editor(df, column_config={"Done":st.column_config.CheckboxColumn(width="small")}, hide_index=True, use_container_width=True)
+        # 일반 보기 모드 (카드 스타일)
+        for i, row in st.session_state.project_data.iterrows():
+            icon = '✅' if row['Done'] else '📋'
+            deco = 'text-decoration:line-through; opacity:0.6;' if row['Done'] else ''
+            st.markdown(f"<div class='metric-card' style='padding:12px;'><div style='display:flex; justify-content:space-between; align-items:center; {deco}'><span style='font-size:1.1rem;'>{icon} <b>{row['Subject']}</b> : {row['Task']}</span><span style='font-size:0.85rem; color:#a0a0b0;'>📅 {row['Deadline']}</span></div></div>", unsafe_allow_html=True)
