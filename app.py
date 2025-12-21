@@ -453,14 +453,16 @@ with menu[0]:
         st.markdown(f"<div class='metric-card'><div style='text-align:center; margin-bottom:5px'>📚 학기 이수율</div>", unsafe_allow_html=True)
         total_sub = sum(len(v) for v in st.session_state.semester_progress.values())
         done_sub = sum(sum(1 for x in v.values() if x) for v in st.session_state.semester_progress.values())
-        st.plotly_chart(draw_pie_chart(done_sub, total_sub, "Semester"), use_container_width=True)
+        # [수정] key 추가
+        st.plotly_chart(draw_pie_chart(done_sub, total_sub, "Semester"), use_container_width=True, key="chart_semester")
         st.markdown("</div>", unsafe_allow_html=True)
         
     # 2. 월간 달성률
     with row1_c2:
         st.markdown(f"<div class='metric-card'><div style='text-align:center; margin-bottom:5px'>📅 이번달 목표</div>", unsafe_allow_html=True)
         m_df = st.session_state.monthly_goals
-        st.plotly_chart(draw_pie_chart(len(m_df[m_df['Done']]), len(m_df), "Monthly"), use_container_width=True)
+        # [수정] key 추가
+        st.plotly_chart(draw_pie_chart(len(m_df[m_df['Done']]), len(m_df), "Monthly"), use_container_width=True, key="chart_monthly")
         st.markdown("</div>", unsafe_allow_html=True)
         
     row2_c1, row2_c2 = st.columns(2)
@@ -469,7 +471,8 @@ with menu[0]:
     with row2_c1:
         st.markdown(f"<div class='metric-card'><div style='text-align:center; margin-bottom:5px'>📆 주간 할일</div>", unsafe_allow_html=True)
         w_df = st.session_state.weekly_tasks
-        st.plotly_chart(draw_pie_chart(len(w_df[w_df['Done']]), len(w_df), "Weekly"), use_container_width=True)
+        # [수정] key 추가
+        st.plotly_chart(draw_pie_chart(len(w_df[w_df['Done']]), len(w_df), "Weekly"), use_container_width=True, key="chart_weekly")
         st.markdown("</div>", unsafe_allow_html=True)
 
     # 4. 데일리 공부시간 (Bar Chart)
@@ -484,7 +487,8 @@ with menu[0]:
                 t2 = datetime.strptime(r['EndTime'], "%H:%M")
                 total_min += (t2-t1).seconds//60
             except: pass
-        st.plotly_chart(draw_pie_chart(total_min, 360, "Daily"), use_container_width=True) # 6시간 기준
+        # [수정] key 추가
+        st.plotly_chart(draw_pie_chart(total_min, 360, "Daily"), use_container_width=True, key="chart_daily") # 6시간 기준
         st.markdown(f"<div style='text-align:center; font-size:0.8rem'>{total_min//60}h {total_min%60}m</div></div>", unsafe_allow_html=True)
         
     row3_c1, row3_c2 = st.columns(2)
@@ -495,7 +499,8 @@ with menu[0]:
         s_df = st.session_state.study_sessions
         s_done = s_df['Done'].sum() if 'Done' in s_df.columns else 0
         s_total = s_df['Total'].sum() if 'Total' in s_df.columns else 1
-        st.plotly_chart(draw_pie_chart(int(s_done), int(s_total), "Study"), use_container_width=True)
+        # [수정] key 추가
+        st.plotly_chart(draw_pie_chart(int(s_done), int(s_total), "Study"), use_container_width=True, key="chart_study")
         st.markdown("</div>", unsafe_allow_html=True)
         
     # 6. 프로젝트 (Pie Chart)
@@ -504,7 +509,8 @@ with menu[0]:
         p_df = st.session_state.project_data
         p_done = p_df['Done'].sum() if 'Done' in p_df.columns else 0
         p_total = p_df['Total'].sum() if 'Total' in p_df.columns else len(p_df)
-        st.plotly_chart(draw_pie_chart(int(p_done), int(p_total), "Project"), use_container_width=True)
+        # [수정] key 추가
+        st.plotly_chart(draw_pie_chart(int(p_done), int(p_total), "Project"), use_container_width=True, key="chart_project")
         st.markdown("</div>", unsafe_allow_html=True)
     
     # 7. 습관 트래커 (진행률 표시)
@@ -515,7 +521,8 @@ with menu[0]:
         total_habits = len(st.session_state.habits)
         today_done = sum(1 for _, h in st.session_state.habits.iterrows() 
                         if str(today_date) in st.session_state.habit_logs.get(h['Name'], []))
-        st.plotly_chart(draw_pie_chart(today_done, total_habits if total_habits > 0 else 1, "Habit"), use_container_width=True)
+        # [수정] key 추가
+        st.plotly_chart(draw_pie_chart(today_done, total_habits if total_habits > 0 else 1, "Habit"), use_container_width=True, key="chart_habit")
         st.markdown("</div>", unsafe_allow_html=True)
 
 # === [2] 학기 관리 ===
