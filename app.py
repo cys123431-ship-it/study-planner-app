@@ -345,9 +345,12 @@ if os.path.exists("background.png"):
     bin_str = get_base64("background.png")
     st.markdown(f"""
         <style>
-        .stApp {{
+        .stApp, [data-testid="stAppViewContainer"] {{
             background: url("data:image/png;base64,{bin_str}") no-repeat center fixed !important;
             background-size: cover !important;
+        }}
+        [data-testid="stHeader"] {{
+            background: rgba(0,0,0,0) !important;
         }}
         </style>
     """, unsafe_allow_html=True)
