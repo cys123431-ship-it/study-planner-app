@@ -4,6 +4,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 from datetime import datetime, timedelta
 import json
+import base64
 import os
 
 # ---------------------------------------------------------
@@ -331,6 +332,25 @@ st.markdown(f"""
     
     </style>
 """, unsafe_allow_html=True)
+
+# ---------------------------------------------------------
+# 2.5 배경 이미지 설정 (사용자 요청)
+# ---------------------------------------------------------
+if os.path.exists("background.png"):
+    def get_base64(bin_file):
+        with open(bin_file, 'rb') as f:
+            data = f.read()
+        return base64.b64encode(data).decode()
+
+    bin_str = get_base64("background.png")
+    st.markdown(f"""
+        <style>
+        .stApp {{
+            background: url("data:image/png;base64,{bin_str}") no-repeat center fixed !important;
+            background-size: cover !important;
+        }}
+        </style>
+    """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
 # 3. 데이터 초기화 (시트에서 먼저 시도 후 없으면 기본값)
