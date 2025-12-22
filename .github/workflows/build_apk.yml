@@ -35,8 +35,9 @@ jobs:
       - name: Flet Build APK
         run: |
           # Flet build command wraps Flutter build
-          # We point to the directory containing main.py
-          flet build apk mobile_app --include-packages flet
+          # We enter the directory to ensure correct context
+          cd mobile_app
+          flet build apk .
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
