@@ -1,0 +1,45 @@
+name: Build Android APK
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: |
+          pip install flet
+          pip install -r requirements.txt
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.19.0
+
+      - name: Flet Build APK
+        run: |
+          # Flet build command wraps Flutter build
+          # We point to the directory containing main.py
+          flet build apk mobile_app --include-packages flet
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: GlassPlanner-APK
+          path: build/app/outputs/flutter-apk/app-release.apk
