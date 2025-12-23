@@ -13,7 +13,8 @@ class DataHandler:
             try:
                 with open(DATA_FILE, "r", encoding="utf-8") as f:
                     return json.load(f)
-            except:
+            except Exception as e:
+                print(f"Error loading data: {e}")
                 return self._default_data()
         return self._default_data()
 
@@ -26,8 +27,11 @@ class DataHandler:
         }
 
     def _save_data(self):
-        with open(DATA_FILE, "w", encoding="utf-8") as f:
-            json.dump(self.data, f, indent=4, ensure_ascii=False)
+        try:
+            with open(DATA_FILE, "w", encoding="utf-8") as f:
+                json.dump(self.data, f, indent=4, ensure_ascii=False)
+        except Exception as e:
+            print(f"Error saving data: {e}")
 
     # --- Daily Operations ---
     def get_daily_tasks(self, date_str):

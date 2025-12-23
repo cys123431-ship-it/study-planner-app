@@ -303,4 +303,4 @@ def main(page: ft.Page):
         )
     )
 
-ft.app(target=main, assets_dir="assets", view=ft.AppView.WEB_BROWSER, port=8553)
+ft.app(target=main, assets_dir="assets")
