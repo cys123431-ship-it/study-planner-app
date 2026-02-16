@@ -1,30 +1,64 @@
 import flet as ft
 from data_handler import DataHandler
-from date_utils import to_date_str, to_iso_week_str, to_month_str
+import traceback
 
-def main(page: ft.Page):
+try:
+    from date_utils import to_date_str, to_iso_week_str, to_month_str
+except Exception:
+    import datetime as _dt
+
+    def to_date_str(value=None):
+        target = value or _dt.date.today()
+        return target.strftime("%Y-%m-%d")
+
+    def to_month_str(value=None):
+        target = value or _dt.date.today()
+        return target.strftime("%Y-%m")
+
+    def to_iso_week_str(value=None):
+        target = value or _dt.date.today()
+        iso_year, iso_week, _ = target.isocalendar()
+        return f"{iso_year}-W{iso_week:02d}"
+
+
+def _build_app(page: ft.Page):
     # --- 1. Page Configuration ---
     page.title = "Glass Planner"
-    page.theme_mode = "dark"
+    page.theme_mode = ft.ThemeMode.DARK
     page.padding = 0
-    page.window_width = 450
-    page.window_height = 850
-    page.bgcolor = "black"
+    page.bgcolor = ft.Colors.BLACK
+
+    platform_name = str(getattr(page, "platform", "")).lower()
+    is_mobile = ("android" in platform_name) or ("ios" in platform_name)
+
+    # Desktop-only window sizing. Mobile platforms may throw or ignore these properties.
+    if not is_mobile:
+        try:
+            if getattr(page, "window", None) is not None:
+                page.window.width = 450
+                page.window.height = 850
+            else:
+                page.window_width = 450
+                page.window_height = 850
+        except Exception:
+            pass
 
     db = DataHandler()
 
     # --- 2. State & Functions ---
-    def on_nav_change(e):
+    def show_view(index: int):
         page_content.controls.clear()
-        idx = e.control.selected_index
-        if idx == 0:
+        if index == 0:
             build_daily_view()
-        elif idx == 1:
+        elif index == 1:
             build_weekly_view()
-        elif idx == 2:
+        elif index == 2:
             build_monthly_view()
-        elif idx == 3:
+        elif index == 3:
             build_dashboard_view()
+
+    def on_nav_change(e):
+        show_view(e.control.selected_index)
         page.update()
 
     def add_daily_todo(e):
@@ -239,35 +273,46 @@ def main(page: ft.Page):
         )
 
     # --- 4. Main Layout Composition ---
-    
-    # Navigation Rail
-    nav_rail = ft.NavigationRail(
-        selected_index=0,
-        label_type=ft.NavigationRailLabelType.ALL,
-        min_width=70,
-        min_extended_width=150,
-        # group_alignment=-0.9,
-        destinations=[
-            ft.NavigationRailDestination(icon=ft.Icons.TODAY, label="Daily"),
-            ft.NavigationRailDestination(icon=ft.Icons.CALENDAR_VIEW_WEEK, label="Weekly"),
-            ft.NavigationRailDestination(icon=ft.Icons.CALENDAR_MONTH, label="Monthly"),
-            ft.NavigationRailDestination(icon=ft.Icons.DASHBOARD, label="Stats"),
-        ],
-        on_change=on_nav_change,
-        bgcolor="#1a000000" # Transparent black
-    )
-
-    # Main Content Area
-    # page_content is a Column so we can append controls to it.
-    # To add padding/expansion, we wrap it in a Container later?
-    # Or simply: page_content = ft.Column(expand=True)
-    
-    # Let's verify how we use it. We do page_content.controls.clear() and .append()
-    # So page_content must be a Column or Row.
     page_content = ft.Column(expand=True)  # Changed from Container to Column
 
     # Initialize with Daily View
     build_daily_view()
+
+    if is_mobile:
+        page.navigation_bar = ft.NavigationBar(
+            selected_index=0,
+            on_change=on_nav_change,
+            destinations=[
+                ft.NavigationBarDestination(icon=ft.Icons.TODAY, label="Daily"),
+                ft.NavigationBarDestination(icon=ft.Icons.CALENDAR_VIEW_WEEK, label="Weekly"),
+                ft.NavigationBarDestination(icon=ft.Icons.CALENDAR_MONTH, label="Monthly"),
+                ft.NavigationBarDestination(icon=ft.Icons.DASHBOARD, label="Stats"),
+            ],
+        )
+        foreground = page_content
+    else:
+        nav_rail = ft.NavigationRail(
+            selected_index=0,
+            label_type=ft.NavigationRailLabelType.ALL,
+            min_width=70,
+            min_extended_width=150,
+            destinations=[
+                ft.NavigationRailDestination(icon=ft.Icons.TODAY, label="Daily"),
+                ft.NavigationRailDestination(icon=ft.Icons.CALENDAR_VIEW_WEEK, label="Weekly"),
+                ft.NavigationRailDestination(icon=ft.Icons.CALENDAR_MONTH, label="Monthly"),
+                ft.NavigationRailDestination(icon=ft.Icons.DASHBOARD, label="Stats"),
+            ],
+            on_change=on_nav_change,
+            bgcolor="#1a000000",
+        )
+        foreground = ft.Row(
+            [
+                nav_rail,
+                ft.VerticalDivider(width=1, color="white24"),
+                page_content,
+            ],
+            expand=True,
+        )
 
     page.add(
         ft.Stack(
@@ -275,30 +320,48 @@ def main(page: ft.Page):
                 # Background
                 ft.Image(
                     src="assets/background.png",
-                    width=page.window_width,
-                    height=page.window_height,
+                    expand=True,
                     fit="cover",
                     opacity=0.8
                 ),
                 # Glass Gradient
                 ft.Container(
+                    expand=True,
                     gradient=ft.LinearGradient(
                         colors=["#99000000", "#cc000000"],
                         begin=ft.alignment.top_left,
                     ),
                 ),
-                # Content Row (Nav + Page)
-                ft.Row(
-                    [
-                        nav_rail,
-                        ft.VerticalDivider(width=1, color="white24"),
-                        page_content
-                    ],
-                    expand=True
-                )
+                # Foreground content
+                foreground,
             ],
             expand=True
         )
     )
+
+
+def main(page: ft.Page):
+    try:
+        _build_app(page)
+    except Exception:
+        error_text = traceback.format_exc()
+        try:
+            page.clean()
+            page.padding = 16
+            page.bgcolor = ft.Colors.BLACK
+            page.add(
+                ft.Text("앱 시작 오류", color=ft.Colors.RED_300, size=22, weight=ft.FontWeight.BOLD),
+                ft.Text(error_text, color=ft.Colors.WHITE70, selectable=True, size=12),
+            )
+            page.update()
+        except Exception:
+            pass
+
+        try:
+            with open("app_error.log", "w", encoding="utf-8") as f:
+                f.write(error_text)
+        except Exception:
+            pass
+
 
 ft.app(target=main, assets_dir="assets")

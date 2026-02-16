@@ -3,7 +3,17 @@ import json
 import os
 import shutil
 
-DATA_FILE = "schedule_data.json"
+
+def _resolve_data_file():
+    try:
+        base_dir = os.path.join(os.path.expanduser("~"), ".study_planner")
+        os.makedirs(base_dir, exist_ok=True)
+        return os.path.join(base_dir, "schedule_data.json")
+    except Exception:
+        return "schedule_data.json"
+
+
+DATA_FILE = _resolve_data_file()
 
 
 class DataHandler:
