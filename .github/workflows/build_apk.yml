@@ -23,8 +23,12 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          pip install flet
-          pip install -r requirements.txt
+          pip install -r requirements-mobile.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run Tests
+        run: |
+          pytest -q
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2

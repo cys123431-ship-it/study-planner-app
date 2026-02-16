@@ -1,1 +1,2 @@
-flet
+# Default install target: mobile build dependencies
+-r requirements-mobile.txt

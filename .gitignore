@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+schedule_data.json
+schedule_data.json.bak
+*.tmp

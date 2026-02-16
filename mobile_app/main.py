@@ -1,6 +1,6 @@
 import flet as ft
 from data_handler import DataHandler
-import datetime
+from date_utils import to_date_str, to_iso_week_str, to_month_str
 
 def main(page: ft.Page):
     # --- 1. Page Configuration ---
@@ -12,7 +12,6 @@ def main(page: ft.Page):
     page.bgcolor = "black"
 
     db = DataHandler()
-    today_str = datetime.date.today().strftime("%Y-%m-%d")
 
     # --- 2. State & Functions ---
     def on_nav_change(e):
@@ -30,13 +29,13 @@ def main(page: ft.Page):
 
     def add_daily_todo(e):
         if not todo_input.value: return
-        db.add_daily_task(today_str, todo_input.value, "todo")
+        db.add_daily_task(to_date_str(), todo_input.value, "todo")
         todo_input.value = ""
         refresh_daily_list()
         page.update()
 
     def toggle_daily(e, task_id):
-        db.toggle_daily_task(today_str, task_id)
+        db.toggle_daily_task(to_date_str(), task_id)
         refresh_daily_list()
         page.update()
 
@@ -47,13 +46,13 @@ def main(page: ft.Page):
     todo_input = ft.TextField(hint_text="Add task...", expand=True, on_submit=add_daily_todo, height=40, text_size=14, content_padding=10)
     
     def delete_daily(e, task_id):
-        db.delete_daily_task(today_str, task_id)
+        db.delete_daily_task(to_date_str(), task_id)
         refresh_daily_list()
         page.update()
 
     def refresh_daily_list():
         todo_list.controls.clear()
-        tasks = db.get_daily_tasks(today_str)
+        tasks = db.get_daily_tasks(to_date_str())
         for t in tasks:
             if t.get("category") == "todo":
                 todo_list.controls.append(
@@ -70,7 +69,7 @@ def main(page: ft.Page):
         page_content.controls.append(
             ft.Column([
                 ft.Text("DAILY PLANNER", size=24, weight="bold", font_family="Verdana"),
-                ft.Text(today_str, size=16, color="white70"),
+                ft.Text(to_date_str(), size=16, color="white70"),
                 ft.Divider(color="white24"),
                 
                 ft.Row([
@@ -100,27 +99,27 @@ def main(page: ft.Page):
     # [WEEKLY VIEW]
     def add_weekly_item(e, day, input_field):
         if not input_field.value: return
-        week_str = datetime.date.today().strftime("%Y-W%U")
+        week_str = to_iso_week_str()
         db.add_weekly_task(week_str, day, input_field.value)
         input_field.value = ""
         build_weekly_view()
         page.update()
 
     def delete_weekly_item(e, day, task_id):
-        week_str = datetime.date.today().strftime("%Y-W%U")
+        week_str = to_iso_week_str()
         db.delete_weekly_task(week_str, day, task_id)
         build_weekly_view()
         page.update()
     
     def toggle_weekly_item(e, day, task_id):
-        week_str = datetime.date.today().strftime("%Y-W%U")
+        week_str = to_iso_week_str()
         db.toggle_weekly_task(week_str, day, task_id)
         # No full rebuild needed, just toggle state technically, but rebuild ensures consistency
         build_weekly_view()
         page.update()
 
     def build_weekly_view():
-        week_str = datetime.date.today().strftime("%Y-W%U")
+        week_str = to_iso_week_str()
         tasks_map = db.get_weekly_tasks(week_str)
         days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
         
@@ -163,26 +162,25 @@ def main(page: ft.Page):
     # [MONTHLY VIEW]
     def add_monthly_goal_ui(e):
         if not monthly_input.value: return
-        db.add_monthly_goal(current_month_str, monthly_input.value)
+        db.add_monthly_goal(to_month_str(), monthly_input.value)
         monthly_input.value = ""
         build_monthly_view()
         page.update()
 
     def delete_monthly_goal_ui(e, goal_id):
-        db.delete_monthly_goal(current_month_str, goal_id)
+        db.delete_monthly_goal(to_month_str(), goal_id)
         build_monthly_view()
         page.update()
 
     def toggle_monthly_goal_ui(e, goal_id):
-        db.toggle_monthly_goal(current_month_str, goal_id)
+        db.toggle_monthly_goal(to_month_str(), goal_id)
         build_monthly_view()
         page.update()
 
-    current_month_str = datetime.date.today().strftime("%Y-%m")
     monthly_input = ft.TextField(hint_text="Add Monthly Goal...", expand=True, on_submit=add_monthly_goal_ui)
 
     def build_monthly_view():
-        goals = db.get_monthly_goals(current_month_str)
+        goals = db.get_monthly_goals(to_month_str())
         goal_list = ft.Column(spacing=10)
         
         for g in goals:
@@ -210,9 +208,9 @@ def main(page: ft.Page):
     # [DASHBOARD VIEW]
     def build_dashboard_view():
         # Calculate Rates
-        daily_rate = db.get_completion_rate(today_str)
-        weekly_rate = db.get_weekly_completion_rate(datetime.date.today().strftime("%Y-W%U"))
-        monthly_rate = db.get_monthly_completion_rate(current_month_str)
+        daily_rate = db.get_completion_rate(to_date_str())
+        weekly_rate = db.get_weekly_completion_rate(to_iso_week_str())
+        monthly_rate = db.get_monthly_completion_rate(to_month_str())
         
         page_content.controls.clear()
         page_content.controls.append(
