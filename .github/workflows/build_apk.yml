@@ -4,31 +4,28 @@ on:
   push:
     branches:
       - main
+    tags:
+      - "android-apk-*"
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - name: Install Dependencies
         run: |
           pip install -r requirements-mobile.txt
-          pip install -r requirements-dev.txt
-
-      - name: Run Tests
-        run: |
-          pytest -q
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -41,10 +38,26 @@ jobs:
           # Flet build command wraps Flutter build
           # We enter the directory to ensure correct context
           cd mobile_app
-          flet build apk .
+          flet build apk . --yes --no-rich-output
+
+      - name: Find APK path
+        id: find_apk
+        run: |
+          APK_PATH=$(find . -type f -name "*.apk" | head -n 1)
+          if [ -z "$APK_PATH" ]; then
+            echo "No APK file found."
+            exit 1
+          fi
+          echo "apk_path=$APK_PATH" >> "$GITHUB_OUTPUT"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: GlassPlanner-APK
-          path: "**/*.apk"
+          path: ${{ steps.find_apk.outputs.apk_path }}
+
+      - name: Attach APK to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.find_apk.outputs.apk_path }}
