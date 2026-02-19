@@ -350,7 +350,7 @@ def main(page: ft.Page):
             page.padding = 16
             page.bgcolor = ft.Colors.BLACK
             page.add(
-                ft.Text("???�작 ?�류", color=ft.Colors.RED_300, size=22, weight=ft.FontWeight.BOLD),
+                ft.Text("앱 시작 오류", color=ft.Colors.RED_300, size=22, weight=ft.FontWeight.BOLD),
                 ft.Text(error_text, color=ft.Colors.WHITE70, selectable=True, size=12),
             )
             page.update()
