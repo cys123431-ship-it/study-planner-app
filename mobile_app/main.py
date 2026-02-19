@@ -329,7 +329,7 @@ def _build_app(page: ft.Page):
                     expand=True,
                     gradient=ft.LinearGradient(
                         colors=["#99000000", "#cc000000"],
-                        begin=ft.alignment.top_left,
+                        begin=ft.alignment.Alignment(-1, -1),
                     ),
                 ),
                 # Foreground content
@@ -350,7 +350,7 @@ def main(page: ft.Page):
             page.padding = 16
             page.bgcolor = ft.Colors.BLACK
             page.add(
-                ft.Text("앱 시작 오류", color=ft.Colors.RED_300, size=22, weight=ft.FontWeight.BOLD),
+                ft.Text("???�작 ?�류", color=ft.Colors.RED_300, size=22, weight=ft.FontWeight.BOLD),
                 ft.Text(error_text, color=ft.Colors.WHITE70, selectable=True, size=12),
             )
             page.update()
