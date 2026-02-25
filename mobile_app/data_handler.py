@@ -253,7 +253,16 @@ class DataHandler:
             return []
         return goals
 
-    def add_monthly_goal(self, month_str, content):
+    def add_monthly_goal(
+        self,
+        month_str,
+        content,
+        group=None,
+        name=None,
+        description=None,
+        start=None,
+        end=None,
+    ):
         monthly_map = self.data.setdefault("monthly", {})
         if month_str not in monthly_map or isinstance(monthly_map[month_str], dict):
             monthly_map[month_str] = []
@@ -263,6 +272,18 @@ class DataHandler:
             "content": content,
             "done": False,
         }
+
+        if isinstance(group, str) and group.strip():
+            new_goal["group"] = group.strip()
+        if isinstance(name, str) and name.strip():
+            new_goal["name"] = name.strip()
+        if isinstance(description, str) and description.strip():
+            new_goal["description"] = description.strip()
+        if isinstance(start, str) and start.strip():
+            new_goal["start"] = start.strip()
+        if isinstance(end, str) and end.strip():
+            new_goal["end"] = end.strip()
+
         monthly_map[month_str].append(new_goal)
         self._save_data()
 

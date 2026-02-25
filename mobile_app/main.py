@@ -263,6 +263,55 @@ def _build_app(page: ft.Page):
                 )
             )
 
+        recent_project_cards = []
+        recent_goals = list(reversed(monthly_goals[-4:]))
+        for goal in recent_goals:
+            content_text = (goal.get("content") or "").strip()
+            project_name = (goal.get("name") or content_text or "Untitled Project").strip()
+            project_group = (goal.get("group") or "").strip()
+            project_description = (goal.get("description") or "").strip()
+            start_text = (goal.get("start") or "").strip()
+            end_text = (goal.get("end") or "").strip()
+
+            if not project_group and content_text.startswith("[") and "]" in content_text:
+                bracket_index = content_text.find("]")
+                candidate_group = content_text[1:bracket_index].strip()
+                candidate_name = content_text[bracket_index + 1:].strip()
+                if candidate_group:
+                    project_group = candidate_group
+                if candidate_name:
+                    project_name = candidate_name
+
+            meta_parts = []
+            if project_group:
+                meta_parts.append(project_group)
+            if start_text or end_text:
+                meta_parts.append(f"{start_text or '-'} ~ {end_text or '-'}")
+            meta_text = " • ".join(meta_parts) if meta_parts else "Saved project"
+
+            recent_project_cards.append(
+                card(
+                    ft.Column(
+                        [
+                            ft.Text(project_name, size=14, weight=ft.FontWeight.W_600, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
+                            ft.Text(meta_text, size=11, color=TEXT_SECONDARY, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
+                            ft.Text(
+                                project_description or content_text,
+                                size=12,
+                                color=TEXT_SECONDARY,
+                                max_lines=2,
+                                overflow=ft.TextOverflow.ELLIPSIS,
+                            ),
+                        ],
+                        spacing=2,
+                    ),
+                    padding=12,
+                )
+            )
+
+        if not recent_project_cards:
+            recent_project_cards.append(card(ft.Text("저장된 프로젝트가 없습니다.", color=TEXT_SECONDARY)))
+
         page_content.controls.clear()
         page_content.controls.append(
             ft.Column(
@@ -289,8 +338,10 @@ def _build_app(page: ft.Page):
                     hero,
                     ft.Row([ft.Text("In Progress", size=18, weight=ft.FontWeight.BOLD), ft.Text("•", color=PRIMARY_PURPLE)], spacing=6),
                     ft.Column(in_progress_cards, spacing=10),
-                    ft.Row([ft.Text("Task Groups", size=18, weight=ft.FontWeight.BOLD), ft.Text("4", color=PRIMARY_PURPLE)], spacing=6),
+                    ft.Row([ft.Text("Task Groups", size=18, weight=ft.FontWeight.BOLD), ft.Text(str(len(task_groups)), color=PRIMARY_PURPLE)], spacing=6),
                     ft.Column(group_cards, spacing=10),
+                    ft.Row([ft.Text("Recent Projects", size=18, weight=ft.FontWeight.BOLD), ft.Text(str(goal_total), color=PRIMARY_PURPLE)], spacing=6),
+                    ft.Column(recent_project_cards, spacing=10),
                 ],
                 expand=True,
                 scroll=ft.ScrollMode.AUTO,
@@ -471,30 +522,50 @@ def _build_app(page: ft.Page):
             project_form_state["end"] = e.control.value or to_date_str()
 
         def submit_project(e):
-            name = (project_form_state.get("name") or "").strip()
+            group = group_dropdown.value or "Work"
+            name = (name_input.value or "").strip()
+            description = (description_input.value or "").strip()
+            start = (start_input.value or to_date_str()).strip()
+            end = (end_input.value or to_date_str()).strip()
+
+            project_form_state["group"] = group
+            project_form_state["name"] = name
+            project_form_state["description"] = description
+            project_form_state["start"] = start
+            project_form_state["end"] = end
+
             if not name:
                 show_snack("프로젝트 이름을 입력해 주세요.", "#D14343")
                 page.update()
                 return
 
-            group = project_form_state.get("group") or "Work"
-            db.add_monthly_goal(to_month_str(), f"[{group}] {name}")
+            db.add_monthly_goal(
+                to_month_str(),
+                f"[{group}] {name}",
+                group=group,
+                name=name,
+                description=description,
+                start=start,
+                end=end,
+            )
+            project_form_state["group"] = "Work"
             project_form_state["name"] = ""
             project_form_state["description"] = ""
-            build_add_project_view()
+            project_form_state["start"] = to_date_str()
+            project_form_state["end"] = to_date_str()
             show_snack("프로젝트가 추가되었습니다.", SUCCESS_GREEN)
-            page.update()
+            jump_to(0)
 
         group_dropdown = ft.Dropdown(
             label="Task Group",
             value=project_form_state.get("group", "Work"),
             options=[ft.dropdown.Option("Work"), ft.dropdown.Option("Study"), ft.dropdown.Option("Personal")],
-            on_change=update_group,
             filled=True,
             bgcolor=SURFACE_SOFT,
             border_color="transparent",
             border_radius=12,
         )
+        group_dropdown.on_change = update_group
 
         name_input = ft.TextField(
             label="Project Name",
