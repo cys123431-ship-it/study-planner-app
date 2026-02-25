@@ -329,7 +329,7 @@ def _build_app(page: ft.Page):
                 content=ft.Text("교시(50분)", weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER),
                 width=left_col_width,
                 height=52,
-                alignment=ft.alignment.center,
+                alignment=ft.Alignment(0, 0),
                 bgcolor="#2a2a2a",
                 border=ft.border.all(1, table_border_color),
             )
@@ -340,7 +340,7 @@ def _build_app(page: ft.Page):
                     content=ft.Text(day, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER),
                     width=day_col_width,
                     height=52,
-                    alignment=ft.alignment.center,
+                    alignment=ft.Alignment(0, 0),
                     bgcolor="#2a2a2a",
                     border=ft.border.all(1, table_border_color),
                 )
@@ -353,7 +353,7 @@ def _build_app(page: ft.Page):
                 content=ft.Text(format_period_label(period), size=12, text_align=ft.TextAlign.CENTER),
                 width=left_col_width,
                 height=row_height,
-                alignment=ft.alignment.center,
+                alignment=ft.Alignment(0, 0),
                 bgcolor="#2a2a2a",
                 border=ft.border.all(1, table_border_color),
             )
@@ -384,7 +384,7 @@ def _build_app(page: ft.Page):
                         width=day_col_width,
                         height=row_height,
                         padding=6,
-                        alignment=ft.alignment.center,
+                        alignment=ft.Alignment(0, 0),
                         bgcolor=bg_color,
                         border=ft.border.all(1, table_border_color),
                     )
@@ -610,7 +610,7 @@ def _build_app(page: ft.Page):
                     expand=True,
                     gradient=ft.LinearGradient(
                         colors=["#99000000", "#cc000000"],
-                        begin=ft.alignment.Alignment(-1, -1),
+                        begin=ft.Alignment(-1, -1),
                     ),
                 ),
                 # Foreground content
