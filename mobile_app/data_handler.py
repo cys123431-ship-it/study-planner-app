@@ -17,6 +17,11 @@ DATA_FILE = _resolve_data_file()
 
 
 class DataHandler:
+    VALID_TIMETABLE_DAYS = ["월", "화", "수", "목", "금", "토"]
+    MIN_PERIOD = 0
+    MAX_PERIOD = 14
+    DEFAULT_SUBJECT_COLOR = "#6CAB45"
+
     def __init__(self, data_file=DATA_FILE):
         self.data_file = data_file
         self.backup_file = f"{data_file}.bak"
@@ -28,10 +33,73 @@ class DataHandler:
             "weekly": {},  # Format: "YYYY-W##": {"Mon": [], ...}
             "monthly": {}, # Format: "YYYY-MM": []
             "memo": "",
+            "timetable_entries": [],  # Format: [{"id": ..., "subject": ..., "day": ..., "start_period": ..., "end_period": ...}]
+            "subject_colors": {},     # Format: {"subject": "#RRGGBB"}
         }
 
     def _default_week(self):
         return {day: [] for day in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]}
+
+    def _normalize_hex_color(self, value):
+        if isinstance(value, str):
+            text = value.strip()
+            if len(text) == 7 and text[0] == "#":
+                hex_part = text[1:]
+                if all(ch in "0123456789abcdefABCDEF" for ch in hex_part):
+                    return f"#{hex_part.upper()}"
+        return self.DEFAULT_SUBJECT_COLOR
+
+    def _normalize_subject_colors(self, raw):
+        if not isinstance(raw, dict):
+            return {}
+
+        normalized = {}
+        for subject, color in raw.items():
+            if not isinstance(subject, str):
+                continue
+            subject_name = subject.strip()
+            if not subject_name:
+                continue
+            normalized[subject_name] = self._normalize_hex_color(color)
+        return normalized
+
+    def _normalize_timetable_entries(self, raw):
+        if not isinstance(raw, list):
+            return []
+
+        normalized = []
+        for entry in raw:
+            if not isinstance(entry, dict):
+                continue
+
+            subject = str(entry.get("subject", "")).strip()
+            day = str(entry.get("day", "")).strip()
+            if not subject or day not in self.VALID_TIMETABLE_DAYS:
+                continue
+
+            try:
+                start_period = int(entry.get("start_period"))
+                end_period = int(entry.get("end_period"))
+            except (TypeError, ValueError):
+                continue
+
+            if start_period < self.MIN_PERIOD or end_period > self.MAX_PERIOD or start_period > end_period:
+                continue
+
+            entry_id = entry.get("id")
+            if not isinstance(entry_id, str) or not entry_id:
+                entry_id = datetime.datetime.now().isoformat()
+
+            normalized.append(
+                {
+                    "id": entry_id,
+                    "subject": subject,
+                    "day": day,
+                    "start_period": start_period,
+                    "end_period": end_period,
+                }
+            )
+        return normalized
 
     def _normalize_data(self, raw):
         default = self._default_data()
@@ -42,11 +110,15 @@ class DataHandler:
         weekly = raw.get("weekly")
         monthly = raw.get("monthly")
         memo = raw.get("memo")
+        timetable_entries = raw.get("timetable_entries")
+        subject_colors = raw.get("subject_colors")
 
         default["daily"] = daily if isinstance(daily, dict) else {}
         default["weekly"] = weekly if isinstance(weekly, dict) else {}
         default["monthly"] = monthly if isinstance(monthly, dict) else {}
         default["memo"] = memo if isinstance(memo, str) else ""
+        default["timetable_entries"] = self._normalize_timetable_entries(timetable_entries)
+        default["subject_colors"] = self._normalize_subject_colors(subject_colors)
         return default
 
     def _load_json_file(self, path):
@@ -248,3 +320,97 @@ class DataHandler:
             if isinstance(day_tasks, list):
                 tasks.extend(day_tasks)
         return tasks
+
+    # --- Timetable Operations ---
+    def get_timetable_entries(self):
+        entries = self.data.get("timetable_entries", [])
+        if not isinstance(entries, list):
+            return []
+        return sorted(
+            entries,
+            key=lambda item: (
+                self.VALID_TIMETABLE_DAYS.index(item.get("day", "월")) if item.get("day", "월") in self.VALID_TIMETABLE_DAYS else 99,
+                int(item.get("start_period", 0)),
+                int(item.get("end_period", 0)),
+                item.get("subject", ""),
+            ),
+        )
+
+    def get_subject_colors(self):
+        colors = self.data.get("subject_colors", {})
+        if not isinstance(colors, dict):
+            return {}
+        return dict(colors)
+
+    def get_subject_color(self, subject):
+        subject_name = str(subject).strip()
+        if not subject_name:
+            return self.DEFAULT_SUBJECT_COLOR
+        return self.get_subject_colors().get(subject_name, self.DEFAULT_SUBJECT_COLOR)
+
+    def add_timetable_entry(self, subject, day, start_period, end_period, color):
+        subject_name = str(subject).strip()
+        day_name = str(day).strip()
+
+        if not subject_name:
+            raise ValueError("과목명을 입력해 주세요.")
+        if day_name not in self.VALID_TIMETABLE_DAYS:
+            raise ValueError("월~토 중에서 요일을 선택해 주세요.")
+
+        try:
+            start = int(start_period)
+            end = int(end_period)
+        except (TypeError, ValueError):
+            raise ValueError("교시는 숫자여야 합니다.")
+
+        if start < self.MIN_PERIOD or end > self.MAX_PERIOD:
+            raise ValueError("교시 범위는 0교시~14교시입니다.")
+        if start > end:
+            raise ValueError("시작 교시는 종료 교시보다 클 수 없습니다.")
+
+        entries = self.data.setdefault("timetable_entries", [])
+        if not isinstance(entries, list):
+            entries = []
+            self.data["timetable_entries"] = entries
+
+        for entry in entries:
+            if entry.get("day") != day_name:
+                continue
+
+            existing_start = int(entry.get("start_period", -1))
+            existing_end = int(entry.get("end_period", -1))
+            is_overlap = not (end < existing_start or start > existing_end)
+            if is_overlap:
+                raise ValueError("선택한 시간대에 이미 다른 과목이 있습니다.")
+
+        subject_colors = self.data.setdefault("subject_colors", {})
+        if not isinstance(subject_colors, dict):
+            subject_colors = {}
+            self.data["subject_colors"] = subject_colors
+
+        if subject_name in subject_colors:
+            color_value = subject_colors[subject_name]
+        else:
+            color_value = self._normalize_hex_color(color)
+            subject_colors[subject_name] = color_value
+
+        new_entry = {
+            "id": datetime.datetime.now().isoformat(),
+            "subject": subject_name,
+            "day": day_name,
+            "start_period": start,
+            "end_period": end,
+        }
+        entries.append(new_entry)
+        self._save_data()
+        return dict(new_entry, color=color_value)
+
+    def delete_timetable_entry(self, entry_id):
+        entries = self.data.get("timetable_entries", [])
+        if not isinstance(entries, list):
+            return
+
+        before_count = len(entries)
+        self.data["timetable_entries"] = [entry for entry in entries if entry.get("id") != entry_id]
+        if len(self.data["timetable_entries"]) != before_count:
+            self._save_data()

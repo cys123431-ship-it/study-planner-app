@@ -44,6 +44,39 @@ def _build_app(page: ft.Page):
             pass
 
     db = DataHandler()
+    timetable_days = ["월", "화", "수", "목", "금", "토"]
+    timetable_periods = list(range(0, 15))
+    timetable_color_options = [
+        ("초록", "#6CAB45"),
+        ("노랑", "#F0D169"),
+        ("주황", "#EB7F2D"),
+        ("하늘", "#76B5E8"),
+        ("분홍", "#F18DA3"),
+        ("보라", "#A889E6"),
+    ]
+
+    def show_snack(message, bgcolor=ft.Colors.BLUE_GREY_800):
+        page.snack_bar = ft.SnackBar(content=ft.Text(message), bgcolor=bgcolor)
+        page.snack_bar.open = True
+
+    def format_period_label(period: int):
+        if period == 0:
+            return "0교시"
+        start_hour = 8 + period
+        return f"{period}교시\n{start_hour:02d}:00~{start_hour:02d}:50"
+
+    def text_color_for_background(hex_color: str):
+        try:
+            clean = hex_color.strip().lstrip("#")
+            if len(clean) != 6:
+                return ft.Colors.BLACK
+            red = int(clean[0:2], 16)
+            green = int(clean[2:4], 16)
+            blue = int(clean[4:6], 16)
+            luminance = (0.299 * red + 0.587 * green + 0.114 * blue) / 255
+            return ft.Colors.BLACK if luminance >= 0.62 else ft.Colors.WHITE
+        except Exception:
+            return ft.Colors.BLACK
 
     # --- 2. State & Functions ---
     def show_view(index: int):
@@ -56,6 +89,8 @@ def _build_app(page: ft.Page):
             build_monthly_view()
         elif index == 3:
             build_dashboard_view()
+        elif index == 4:
+            build_timetable_view()
 
     def on_nav_change(e):
         show_view(e.control.selected_index)
@@ -272,6 +307,250 @@ def _build_app(page: ft.Page):
             ], expand=True)
         )
 
+    # [TIMETABLE VIEW]
+    def build_timetable_grid(entries, subject_colors):
+        table_border_color = "white24"
+        row_height = 74
+        left_col_width = 140
+        day_col_width = 138
+
+        day_period_map = {day: {} for day in timetable_days}
+        for entry in entries:
+            day = entry.get("day")
+            if day not in day_period_map:
+                continue
+            start_period = int(entry.get("start_period", 0))
+            end_period = int(entry.get("end_period", 0))
+            for period in range(start_period, end_period + 1):
+                day_period_map[day][period] = entry
+
+        header_cells = [
+            ft.Container(
+                content=ft.Text("교시(50분)", weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER),
+                width=left_col_width,
+                height=52,
+                alignment=ft.alignment.center,
+                bgcolor="#2a2a2a",
+                border=ft.border.all(1, table_border_color),
+            )
+        ]
+        for day in timetable_days:
+            header_cells.append(
+                ft.Container(
+                    content=ft.Text(day, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER),
+                    width=day_col_width,
+                    height=52,
+                    alignment=ft.alignment.center,
+                    bgcolor="#2a2a2a",
+                    border=ft.border.all(1, table_border_color),
+                )
+            )
+
+        rows = [ft.Row(header_cells, spacing=0)]
+
+        for period in timetable_periods:
+            left_cell = ft.Container(
+                content=ft.Text(format_period_label(period), size=12, text_align=ft.TextAlign.CENTER),
+                width=left_col_width,
+                height=row_height,
+                alignment=ft.alignment.center,
+                bgcolor="#2a2a2a",
+                border=ft.border.all(1, table_border_color),
+            )
+
+            day_cells = []
+            for day in timetable_days:
+                entry = day_period_map[day].get(period)
+                if entry:
+                    subject = entry.get("subject", "")
+                    bg_color = subject_colors.get(subject, db.DEFAULT_SUBJECT_COLOR)
+                    is_start_period = int(entry.get("start_period", period)) == period
+                    text_value = subject if is_start_period else ""
+                    text_color = text_color_for_background(bg_color)
+                    content = ft.Text(
+                        text_value,
+                        size=14,
+                        weight=ft.FontWeight.W_600,
+                        color=text_color,
+                        text_align=ft.TextAlign.CENTER,
+                    )
+                else:
+                    bg_color = "#202020"
+                    content = ft.Text("", size=12)
+
+                day_cells.append(
+                    ft.Container(
+                        content=content,
+                        width=day_col_width,
+                        height=row_height,
+                        padding=6,
+                        alignment=ft.alignment.center,
+                        bgcolor=bg_color,
+                        border=ft.border.all(1, table_border_color),
+                    )
+                )
+
+            rows.append(ft.Row([left_cell, *day_cells], spacing=0))
+
+        return ft.Column(rows, spacing=0)
+
+    def build_timetable_view():
+        entries = db.get_timetable_entries()
+        subject_colors = db.get_subject_colors()
+
+        subject_input = ft.TextField(label="과목명", width=180, dense=True)
+        day_dropdown = ft.Dropdown(
+            label="요일",
+            width=120,
+            dense=True,
+            value=timetable_days[0],
+            options=[ft.dropdown.Option(key=day, text=day) for day in timetable_days],
+        )
+        period_options = [ft.dropdown.Option(key=str(period), text=f"{period}교시") for period in timetable_periods]
+        start_dropdown = ft.Dropdown(label="시작", width=110, dense=True, value="1", options=period_options)
+        end_dropdown = ft.Dropdown(label="종료", width=110, dense=True, value="1", options=period_options)
+        color_dropdown = ft.Dropdown(
+            label="색상",
+            width=150,
+            dense=True,
+            value=timetable_color_options[0][1],
+            options=[
+                ft.dropdown.Option(key=color_value, text=f"{color_name} ({color_value})")
+                for color_name, color_value in timetable_color_options
+            ],
+        )
+
+        def add_timetable_entry_ui(e):
+            subject = (subject_input.value or "").strip()
+            if not subject:
+                show_snack("과목명을 입력해 주세요.", ft.Colors.RED_300)
+                page.update()
+                return
+
+            try:
+                start_period = int(start_dropdown.value)
+                end_period = int(end_dropdown.value)
+            except (TypeError, ValueError):
+                show_snack("시작/종료 교시를 선택해 주세요.", ft.Colors.RED_300)
+                page.update()
+                return
+
+            if start_period > end_period:
+                show_snack("시작 교시는 종료 교시보다 클 수 없습니다.", ft.Colors.RED_300)
+                page.update()
+                return
+
+            day_value = day_dropdown.value or timetable_days[0]
+            selected_color = color_dropdown.value or timetable_color_options[0][1]
+            colors_before = db.get_subject_colors()
+            had_existing_color = subject in colors_before
+            previous_color = colors_before.get(subject, "").upper()
+
+            try:
+                db.add_timetable_entry(subject, day_value, start_period, end_period, selected_color)
+            except ValueError as exc:
+                show_snack(str(exc), ft.Colors.RED_300)
+                page.update()
+                return
+
+            subject_input.value = ""
+            build_timetable_view()
+
+            if had_existing_color and previous_color and previous_color != selected_color.upper():
+                show_snack("같은 과목은 기존 색상을 자동으로 사용했습니다.", ft.Colors.BLUE_300)
+            else:
+                show_snack("시간표에 과목을 추가했습니다.", ft.Colors.GREEN_300)
+            page.update()
+
+        def delete_timetable_entry_ui(e, entry_id):
+            db.delete_timetable_entry(entry_id)
+            build_timetable_view()
+            show_snack("시간표에서 과목을 삭제했습니다.", ft.Colors.BLUE_300)
+            page.update()
+
+        legend_controls = []
+        for subject_name in sorted(subject_colors):
+            color_value = subject_colors[subject_name]
+            legend_controls.append(
+                ft.Container(
+                    content=ft.Row(
+                        [
+                            ft.Container(width=14, height=14, bgcolor=color_value, border_radius=3),
+                            ft.Text(subject_name, size=12),
+                        ],
+                        spacing=8,
+                    ),
+                    padding=6,
+                    bgcolor="#1c1c1c",
+                    border_radius=8,
+                )
+            )
+
+        timetable_grid = build_timetable_grid(entries, subject_colors)
+
+        entry_list_controls = []
+        if entries:
+            for entry in entries:
+                subject = entry["subject"]
+                day = entry["day"]
+                start_period = entry["start_period"]
+                end_period = entry["end_period"]
+                color_value = subject_colors.get(subject, db.DEFAULT_SUBJECT_COLOR)
+                entry_list_controls.append(
+                    ft.Container(
+                        content=ft.Row(
+                            [
+                                ft.Container(width=12, height=12, bgcolor=color_value, border_radius=2),
+                                ft.Text(f"{subject} | {day} {start_period}~{end_period}교시", expand=True),
+                                ft.IconButton(
+                                    ft.Icons.DELETE_OUTLINE,
+                                    icon_size=18,
+                                    icon_color=ft.Colors.RED_300,
+                                    on_click=lambda e, entry_id=entry["id"]: delete_timetable_entry_ui(e, entry_id),
+                                ),
+                            ],
+                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        ),
+                        padding=10,
+                        bgcolor="#26ffffff",
+                        border_radius=8,
+                    )
+                )
+        else:
+            entry_list_controls.append(ft.Text("등록된 시간표 과목이 없습니다.", color="white70"))
+
+        page_content.controls.clear()
+        page_content.controls.append(
+            ft.Column(
+                [
+                    ft.Text("시간표", size=24, weight="bold"),
+                    ft.Text("0교시는 시간 없이 표시됩니다. 1교시부터 09:00~09:50 형식으로 표기합니다.", size=12, color="white70"),
+                    ft.Row(
+                        [
+                            subject_input,
+                            day_dropdown,
+                            start_dropdown,
+                            end_dropdown,
+                            color_dropdown,
+                            ft.ElevatedButton("추가", icon=ft.Icons.ADD, on_click=add_timetable_entry_ui),
+                        ],
+                        spacing=8,
+                        wrap=True,
+                    ),
+                    ft.Text("과목 색상", size=14, weight="bold"),
+                    ft.Row(legend_controls, wrap=True, spacing=8) if legend_controls else ft.Text("등록된 과목 색상이 없습니다.", size=12, color="white70"),
+                    ft.Container(height=6),
+                    ft.Row([timetable_grid], scroll=ft.ScrollMode.AUTO),
+                    ft.Divider(color="white24"),
+                    ft.Text("등록된 과목", size=16, weight="bold"),
+                    ft.Column(entry_list_controls, spacing=8),
+                ],
+                expand=True,
+                scroll=ft.ScrollMode.AUTO,
+            )
+        )
+
     # --- 4. Main Layout Composition ---
     page_content = ft.Column(expand=True)  # Changed from Container to Column
 
@@ -287,6 +566,7 @@ def _build_app(page: ft.Page):
                 ft.NavigationBarDestination(icon=ft.Icons.CALENDAR_VIEW_WEEK, label="Weekly"),
                 ft.NavigationBarDestination(icon=ft.Icons.CALENDAR_MONTH, label="Monthly"),
                 ft.NavigationBarDestination(icon=ft.Icons.DASHBOARD, label="Stats"),
+                ft.NavigationBarDestination(icon=ft.Icons.TABLE_CHART, label="시간표"),
             ],
         )
         foreground = page_content
@@ -301,6 +581,7 @@ def _build_app(page: ft.Page):
                 ft.NavigationRailDestination(icon=ft.Icons.CALENDAR_VIEW_WEEK, label="Weekly"),
                 ft.NavigationRailDestination(icon=ft.Icons.CALENDAR_MONTH, label="Monthly"),
                 ft.NavigationRailDestination(icon=ft.Icons.DASHBOARD, label="Stats"),
+                ft.NavigationRailDestination(icon=ft.Icons.TABLE_CHART, label="시간표"),
             ],
             on_change=on_nav_change,
             bgcolor="#1a000000",
