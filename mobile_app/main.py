@@ -1,6 +1,8 @@
 import flet as ft
 from data_handler import DataHandler
 import traceback
+from pathlib import Path
+import re
 
 try:
     from date_utils import to_date_str, to_iso_week_str, to_month_str
@@ -21,22 +23,84 @@ except Exception:
         return f"{iso_year}-W{iso_week:02d}"
 
 
-BG_APP = "#F6F7FC"
-SURFACE = "#FFFFFF"
-SURFACE_SOFT = "#F3F2FF"
-BORDER = "#E7E9F3"
-TEXT_PRIMARY = "#1E2030"
-TEXT_SECONDARY = "#7C8198"
-PRIMARY_PURPLE = "#5B3CFF"
-PRIMARY_PURPLE_DARK = "#4B2FE0"
-SUCCESS_GREEN = "#17B26A"
-INFO_BLUE = "#4E8CFF"
-WARNING_ORANGE = "#FF8A4C"
+def _material_color_file() -> Path | None:
+    this_dir = Path(__file__).resolve().parent
+    candidates = [
+        this_dir.parent / "material-theme" / "ui" / "theme" / "Color.kt",
+        Path.cwd() / "material-theme" / "ui" / "theme" / "Color.kt",
+        Path.cwd().parent / "material-theme" / "ui" / "theme" / "Color.kt",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _parse_material_colors() -> dict[str, str]:
+    color_file = _material_color_file()
+    if color_file is None:
+        return {}
+    content = color_file.read_text(encoding="utf-8")
+    matches = re.findall(r"val\s+(\w+)\s*=\s*Color\(0x([0-9A-Fa-f]{8})\)", content)
+    return {name: f"#{argb[-6:]}" for name, argb in matches}
+
+
+def _pick_color(colors: dict[str, str], *names: str) -> str:
+    for name in names:
+        value = colors.get(name)
+        if value:
+            return value
+    return next(iter(colors.values()), "")
+
+
+def _with_alpha(rgb: str, alpha: int) -> str:
+    return f"#{alpha:02X}{rgb.lstrip('#')}"
+
+
+_M3_COLORS = _parse_material_colors()
+
+BG_APP = _pick_color(_M3_COLORS, "backgroundLight", "surfaceLight")
+SURFACE = _pick_color(_M3_COLORS, "surfaceLight", "surfaceContainerLowestLight")
+SURFACE_SOFT = _pick_color(_M3_COLORS, "surfaceContainerLowLight", "surfaceContainerLight")
+SURFACE_MUTED = _pick_color(_M3_COLORS, "surfaceContainerLight", "surfaceContainerHighLight")
+SURFACE_HIGHEST = _pick_color(_M3_COLORS, "surfaceContainerHighestLight", "surfaceContainerHighLight")
+BORDER = _pick_color(_M3_COLORS, "outlineVariantLight", "outlineLight")
+TEXT_PRIMARY = _pick_color(_M3_COLORS, "onSurfaceLight", "onBackgroundLight")
+TEXT_SECONDARY = _pick_color(_M3_COLORS, "onSurfaceVariantLight", "outlineLight")
+PRIMARY_PURPLE = _pick_color(_M3_COLORS, "primaryLight", "inversePrimaryLight")
+PRIMARY_PURPLE_DARK = _pick_color(_M3_COLORS, "primaryContainerLight", "primaryLightMediumContrast")
+ON_PRIMARY = _pick_color(_M3_COLORS, "onPrimaryLight", "onPrimaryContainerLight")
+ON_PRIMARY_CONTAINER = _pick_color(_M3_COLORS, "onPrimaryContainerLight", "onPrimaryLight")
+SECONDARY = _pick_color(_M3_COLORS, "secondaryLight", "secondaryContainerLight")
+SECONDARY_CONTAINER = _pick_color(_M3_COLORS, "secondaryContainerLight", "secondaryLight")
+TERTIARY = _pick_color(_M3_COLORS, "tertiaryLight", "tertiaryContainerLight")
+TERTIARY_CONTAINER = _pick_color(_M3_COLORS, "tertiaryContainerLight", "tertiaryLight")
+ERROR_RED = _pick_color(_M3_COLORS, "errorLight", "errorContainerLight")
+ON_ERROR = _pick_color(_M3_COLORS, "onErrorLight", "onErrorContainerLight")
+SUCCESS_GREEN = TERTIARY
+INFO_BLUE = SECONDARY
+WARNING_ORANGE = _pick_color(_M3_COLORS, "secondaryContainerLight", "tertiaryContainerLight")
+BADGE_DONE_BG = TERTIARY_CONTAINER
+BADGE_TODO_BG = SECONDARY_CONTAINER
+SHADOW_COLOR = _with_alpha(_pick_color(_M3_COLORS, "scrimLight", "outlineLight"), 0x16)
+
+# Type scale tokens (M3 hierarchy style)
+TYPE_LABEL_SMALL = 10
+TYPE_LABEL_MEDIUM = 11
+TYPE_BODY_SMALL = 12
+TYPE_BODY_MEDIUM = 13
+TYPE_BODY_LARGE = 14
+TYPE_TITLE_SMALL = 16
+TYPE_TITLE_MEDIUM = 18
+TYPE_TITLE_LARGE = 20
+TYPE_HEADLINE_SMALL = 22
+TYPE_HEADLINE_MEDIUM = 24
 
 
 def _build_app(page: ft.Page):
     page.title = "Task Management"
     page.theme_mode = ft.ThemeMode.LIGHT
+    page.theme = ft.Theme(color_scheme_seed=PRIMARY_PURPLE)
     page.padding = 0
     page.bgcolor = BG_APP
 
@@ -58,12 +122,12 @@ def _build_app(page: ft.Page):
     timetable_days = ["월", "화", "수", "목", "금", "토"]
     timetable_periods = list(range(0, 15))
     timetable_color_options = [
-        ("보라", "#5B3CFF"),
-        ("노랑", "#F0D169"),
-        ("주황", "#EB7F2D"),
-        ("초록", "#6CAB45"),
-        ("하늘", "#76B5E8"),
-        ("핑크", "#F18DA3"),
+        ("Primary", PRIMARY_PURPLE),
+        ("Primary Container", PRIMARY_PURPLE_DARK),
+        ("Secondary", SECONDARY),
+        ("Secondary Container", SECONDARY_CONTAINER),
+        ("Tertiary", TERTIARY),
+        ("Tertiary Container", TERTIARY_CONTAINER),
     ]
 
     current_view_index = 0
@@ -79,15 +143,24 @@ def _build_app(page: ft.Page):
     desktop_nav = None
     page_content = ft.Column(expand=True)
 
+    def m3_icon(rounded_name: str, fallback_icon: str) -> str:
+        return getattr(ft.Icons, rounded_name, fallback_icon)
+
+    icon_arrow_forward = m3_icon("ARROW_FORWARD_ROUNDED", ft.Icons.ARROW_FORWARD)
+    icon_arrow_back = m3_icon("ARROW_BACK_ROUNDED", ft.Icons.ARROW_BACK)
+    icon_notifications = m3_icon("NOTIFICATIONS_NONE_ROUNDED", ft.Icons.NOTIFICATIONS_NONE)
+    icon_delete = m3_icon("DELETE_OUTLINE_ROUNDED", ft.Icons.DELETE_OUTLINE)
+    icon_add = m3_icon("ADD_ROUNDED", ft.Icons.ADD)
+
     def show_snack(message: str, bgcolor: str = PRIMARY_PURPLE):
         page.snack_bar = ft.SnackBar(
-            content=ft.Text(message, color="#FFFFFF"),
+            content=ft.Text(message, color=ON_ERROR if bgcolor == ERROR_RED else ON_PRIMARY),
             bgcolor=bgcolor,
             duration=1800,
         )
         page.snack_bar.open = True
 
-    def card(content, padding=14, bgcolor=SURFACE, radius=18, height=None, expand=False):
+    def card(content, padding=16, bgcolor=SURFACE, radius=24, height=None, expand=False):
         return ft.Container(
             content=content,
             padding=padding,
@@ -97,9 +170,9 @@ def _build_app(page: ft.Page):
             shadow=[
                 ft.BoxShadow(
                     spread_radius=0,
-                    blur_radius=16,
-                    color="#120E1B57",
-                    offset=ft.Offset(0, 6),
+                    blur_radius=20,
+                    color=SHADOW_COLOR,
+                    offset=ft.Offset(0, 8),
                 )
             ],
             height=height,
@@ -117,10 +190,10 @@ def _build_app(page: ft.Page):
                     ft.ControlState.DEFAULT: PRIMARY_PURPLE,
                     ft.ControlState.HOVERED: PRIMARY_PURPLE_DARK,
                 },
-                color={ft.ControlState.DEFAULT: "#FFFFFF"},
-                shape=ft.RoundedRectangleBorder(radius=14),
+                color={ft.ControlState.DEFAULT: ON_PRIMARY},
+                shape=ft.RoundedRectangleBorder(radius=999),
                 elevation={ft.ControlState.DEFAULT: 0},
-                padding={ft.ControlState.DEFAULT: ft.Padding(16, 12, 16, 12)},
+                padding={ft.ControlState.DEFAULT: ft.Padding(18, 12, 18, 12)},
             ),
         )
 
@@ -130,9 +203,9 @@ def _build_app(page: ft.Page):
             on_click=on_click,
             style=ft.ButtonStyle(
                 bgcolor={ft.ControlState.DEFAULT: PRIMARY_PURPLE if selected else SURFACE_SOFT},
-                color={ft.ControlState.DEFAULT: "#FFFFFF" if selected else TEXT_SECONDARY},
-                shape=ft.RoundedRectangleBorder(radius=12),
-                padding={ft.ControlState.DEFAULT: ft.Padding(12, 8, 12, 8)},
+                color={ft.ControlState.DEFAULT: ON_PRIMARY if selected else TEXT_SECONDARY},
+                shape=ft.RoundedRectangleBorder(radius=999),
+                padding={ft.ControlState.DEFAULT: ft.Padding(16, 10, 16, 10)},
             ),
         )
 
@@ -151,7 +224,7 @@ def _build_app(page: ft.Page):
             green = int(clean[2:4], 16)
             blue = int(clean[4:6], 16)
             luminance = (0.299 * red + 0.587 * green + 0.114 * blue) / 255
-            return TEXT_PRIMARY if luminance >= 0.62 else "#FFFFFF"
+            return TEXT_PRIMARY if luminance >= 0.62 else ON_PRIMARY
         except Exception:
             return TEXT_PRIMARY
 
@@ -181,27 +254,27 @@ def _build_app(page: ft.Page):
         hero = card(
             ft.Column(
                 [
-                    ft.Text("오늘의 진행 상황", color="#DDD5FF", size=12),
+                    ft.Text("오늘의 진행 상황", color=ON_PRIMARY_CONTAINER, size=TYPE_BODY_SMALL),
                     ft.Row(
                         [
                             ft.Column(
                                 [
-                                    ft.Text("Task Focus", color="#FFFFFF", size=20, weight=ft.FontWeight.BOLD),
+                                    ft.Text("Task Focus", color=ON_PRIMARY, size=TYPE_TITLE_LARGE, weight=ft.FontWeight.BOLD),
                                     ft.Text(
                                         f"완료 {done_count} / {total_count if total_count else 0}",
-                                        color="#ECE8FF",
-                                        size=13,
+                                        color=ON_PRIMARY_CONTAINER,
+                                        size=TYPE_BODY_MEDIUM,
                                     ),
                                     ft.Container(height=8),
-                                    primary_button("View Today", lambda e: jump_to(1), icon=ft.Icons.ARROW_FORWARD, width=130),
+                                    primary_button("View Today", lambda e: jump_to(1), icon=icon_arrow_forward, width=140),
                                 ],
                                 spacing=2,
                                 expand=True,
                             ),
                             ft.ProgressRing(
                                 value=progress_value,
-                                color="#FFFFFF",
-                                bgcolor="#8B76FF",
+                                color=ON_PRIMARY,
+                                bgcolor=PRIMARY_PURPLE_DARK,
                                 stroke_width=7,
                                 width=74,
                                 height=74,
@@ -224,14 +297,14 @@ def _build_app(page: ft.Page):
                     card(
                         ft.Column(
                             [
-                                ft.Text(day, color=TEXT_SECONDARY, size=11),
-                                ft.Text(task.get("content", ""), size=13, weight=ft.FontWeight.W_600, max_lines=2, overflow=ft.TextOverflow.ELLIPSIS),
+                                ft.Text(day, color=TEXT_SECONDARY, size=TYPE_LABEL_MEDIUM),
+                                ft.Text(task.get("content", ""), size=TYPE_BODY_MEDIUM, weight=ft.FontWeight.W_600, max_lines=2, overflow=ft.TextOverflow.ELLIPSIS),
                                 ft.Container(height=6),
                                 ft.Container(height=4, bgcolor=SURFACE_SOFT, border_radius=6),
                             ],
                             spacing=2,
                         ),
-                        bgcolor="#FFFFFF",
+                        bgcolor=SURFACE,
                     )
                 )
         else:
@@ -249,11 +322,11 @@ def _build_app(page: ft.Page):
                 card(
                     ft.Row(
                         [
-                            ft.Text(label, size=14, weight=ft.FontWeight.W_600),
+                            ft.Text(label, size=TYPE_BODY_LARGE, weight=ft.FontWeight.W_600),
                             ft.Container(
-                                content=ft.Text(f"{count}", size=12, color=PRIMARY_PURPLE, weight=ft.FontWeight.BOLD),
+                                content=ft.Text(f"{count}", size=TYPE_BODY_SMALL, color=PRIMARY_PURPLE, weight=ft.FontWeight.BOLD),
                                 bgcolor=SURFACE_SOFT,
-                                border_radius=10,
+                                border_radius=999,
                                 padding=ft.Padding(10, 4, 10, 4),
                             ),
                         ],
@@ -293,11 +366,11 @@ def _build_app(page: ft.Page):
                 card(
                     ft.Column(
                         [
-                            ft.Text(project_name, size=14, weight=ft.FontWeight.W_600, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
-                            ft.Text(meta_text, size=11, color=TEXT_SECONDARY, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
+                            ft.Text(project_name, size=TYPE_BODY_LARGE, weight=ft.FontWeight.W_600, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
+                            ft.Text(meta_text, size=TYPE_LABEL_MEDIUM, color=TEXT_SECONDARY, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
                             ft.Text(
                                 project_description or content_text,
-                                size=12,
+                                size=TYPE_BODY_SMALL,
                                 color=TEXT_SECONDARY,
                                 max_lines=2,
                                 overflow=ft.TextOverflow.ELLIPSIS,
@@ -320,32 +393,32 @@ def _build_app(page: ft.Page):
                         [
                             ft.Row(
                                 [
-                                    ft.CircleAvatar(content=ft.Text("L", color="#FFFFFF"), bgcolor=PRIMARY_PURPLE, radius=18),
+                                    ft.CircleAvatar(content=ft.Text("L", color=ON_PRIMARY), bgcolor=PRIMARY_PURPLE, radius=18),
                                     ft.Column(
                                         [
-                                            ft.Text("Hello!", size=11, color=TEXT_SECONDARY),
-                                            ft.Text("Livia Vaccaro", size=18, weight=ft.FontWeight.BOLD),
+                                            ft.Text("Hello!", size=TYPE_LABEL_MEDIUM, color=TEXT_SECONDARY),
+                                            ft.Text("Livia Vaccaro", size=TYPE_TITLE_MEDIUM, weight=ft.FontWeight.BOLD),
                                         ],
                                         spacing=1,
                                     ),
                                 ],
-                                spacing=10,
+                                spacing=12,
                             ),
-                            ft.Icon(ft.Icons.NOTIFICATIONS_NONE, color=TEXT_SECONDARY),
+                            ft.Icon(icon_notifications, color=TEXT_SECONDARY),
                         ],
                         alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                     ),
                     hero,
-                    ft.Row([ft.Text("In Progress", size=18, weight=ft.FontWeight.BOLD), ft.Text("•", color=PRIMARY_PURPLE)], spacing=6),
-                    ft.Column(in_progress_cards, spacing=10),
-                    ft.Row([ft.Text("Task Groups", size=18, weight=ft.FontWeight.BOLD), ft.Text(str(len(task_groups)), color=PRIMARY_PURPLE)], spacing=6),
-                    ft.Column(group_cards, spacing=10),
-                    ft.Row([ft.Text("Recent Projects", size=18, weight=ft.FontWeight.BOLD), ft.Text(str(goal_total), color=PRIMARY_PURPLE)], spacing=6),
-                    ft.Column(recent_project_cards, spacing=10),
+                    ft.Row([ft.Text("In Progress", size=TYPE_TITLE_MEDIUM, weight=ft.FontWeight.BOLD), ft.Text("•", color=PRIMARY_PURPLE)], spacing=8),
+                    ft.Column(in_progress_cards, spacing=12),
+                    ft.Row([ft.Text("Task Groups", size=TYPE_TITLE_MEDIUM, weight=ft.FontWeight.BOLD), ft.Text(str(len(task_groups)), color=PRIMARY_PURPLE)], spacing=8),
+                    ft.Column(group_cards, spacing=12),
+                    ft.Row([ft.Text("Recent Projects", size=TYPE_TITLE_MEDIUM, weight=ft.FontWeight.BOLD), ft.Text(str(goal_total), color=PRIMARY_PURPLE)], spacing=8),
+                    ft.Column(recent_project_cards, spacing=12),
                 ],
                 expand=True,
                 scroll=ft.ScrollMode.AUTO,
-                spacing=14,
+                spacing=16,
             )
         )
 
@@ -364,7 +437,7 @@ def _build_app(page: ft.Page):
         def add_today_task(e):
             content = (task_input.value or "").strip()
             if not content:
-                show_snack("할 일을 입력해 주세요.", "#D14343")
+                show_snack("할 일을 입력해 주세요.", ERROR_RED)
                 page.update()
                 return
             db.add_daily_task(today_str, content, "todo")
@@ -392,7 +465,7 @@ def _build_app(page: ft.Page):
             hint_text="오늘 할 일 추가",
             expand=True,
             dense=True,
-            border_radius=12,
+            border_radius=16,
             filled=True,
             bgcolor=SURFACE_SOFT,
             border_color="transparent",
@@ -410,8 +483,8 @@ def _build_app(page: ft.Page):
                 ft.Container(
                     content=ft.Column(
                         [
-                            ft.Text(target.strftime("%d"), size=16, weight=ft.FontWeight.BOLD, color="#FFFFFF" if selected else TEXT_PRIMARY),
-                            ft.Text(target.strftime("%a"), size=11, color="#EFEAFF" if selected else TEXT_SECONDARY),
+                            ft.Text(target.strftime("%d"), size=TYPE_TITLE_SMALL, weight=ft.FontWeight.BOLD, color=ON_PRIMARY if selected else TEXT_PRIMARY),
+                            ft.Text(target.strftime("%a"), size=TYPE_LABEL_MEDIUM, color=ON_PRIMARY_CONTAINER if selected else TEXT_SECONDARY),
                         ],
                         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                         spacing=2,
@@ -420,7 +493,7 @@ def _build_app(page: ft.Page):
                     height=74,
                     bgcolor=PRIMARY_PURPLE if selected else SURFACE,
                     border=ft.border.all(1, "transparent" if selected else BORDER),
-                    border_radius=14,
+                    border_radius=18,
                     alignment=ft.Alignment(0, 0),
                 )
             )
@@ -430,7 +503,7 @@ def _build_app(page: ft.Page):
             for task in visible_tasks:
                 done = bool(task.get("done"))
                 badge_text = "Done" if done else "To do"
-                badge_bg = "#E8F8EF" if done else "#EAF0FF"
+                badge_bg = BADGE_DONE_BG if done else BADGE_TODO_BG
                 badge_color = SUCCESS_GREEN if done else INFO_BLUE
                 task_cards.append(
                     card(
@@ -439,21 +512,21 @@ def _build_app(page: ft.Page):
                                 ft.Checkbox(
                                     label=task.get("content", ""),
                                     value=done,
-                                    check_color="#FFFFFF",
+                                    check_color=ON_PRIMARY,
                                     active_color=PRIMARY_PURPLE,
                                     on_change=lambda e, task_id=task.get("id"): toggle_today_task(e, task_id),
                                     expand=True,
                                 ),
                                 ft.Container(
-                                    content=ft.Text(badge_text, size=11, color=badge_color),
+                                    content=ft.Text(badge_text, size=TYPE_LABEL_MEDIUM, color=badge_color),
                                     bgcolor=badge_bg,
-                                    border_radius=10,
+                                    border_radius=999,
                                     padding=ft.Padding(8, 4, 8, 4),
                                 ),
                                 ft.IconButton(
-                                    ft.Icons.DELETE_OUTLINE,
+                                    icon_delete,
                                     icon_size=18,
-                                    icon_color="#B84D4D",
+                                    icon_color=ERROR_RED,
                                     on_click=lambda e, task_id=task.get("id"): delete_today_task(e, task_id),
                                 ),
                             ],
@@ -471,9 +544,9 @@ def _build_app(page: ft.Page):
                 [
                     ft.Row(
                         [
-                            ft.IconButton(ft.Icons.ARROW_BACK, icon_color=TEXT_PRIMARY, on_click=lambda e: jump_to(0)),
-                            ft.Text("Today’s Tasks", size=22, weight=ft.FontWeight.BOLD),
-                            ft.Icon(ft.Icons.NOTIFICATIONS_NONE, color=TEXT_SECONDARY),
+                            ft.IconButton(icon_arrow_back, icon_color=TEXT_PRIMARY, on_click=lambda e: jump_to(0)),
+                            ft.Text("Today’s Tasks", size=TYPE_HEADLINE_SMALL, weight=ft.FontWeight.BOLD),
+                            ft.Icon(icon_notifications, color=TEXT_SECONDARY),
                         ],
                         alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                     ),
@@ -484,24 +557,24 @@ def _build_app(page: ft.Page):
                             chip_button("To do", today_filter == "To do", lambda e: set_filter("To do")),
                             chip_button("Done", today_filter == "Done", lambda e: set_filter("Done")),
                         ],
-                        spacing=8,
+                        spacing=12,
                     ),
                     card(
                         ft.Row(
                             [
                                 task_input,
-                                primary_button("+", add_today_task),
+                                primary_button("+", add_today_task, icon=icon_add),
                             ],
-                            spacing=10,
+                            spacing=12,
                             vertical_alignment=ft.CrossAxisAlignment.CENTER,
                         ),
-                        padding=10,
+                        padding=12,
                     ),
-                    ft.Column(task_cards, spacing=10),
+                    ft.Column(task_cards, spacing=12),
                 ],
                 expand=True,
                 scroll=ft.ScrollMode.AUTO,
-                spacing=12,
+                spacing=16,
             )
         )
 
@@ -535,7 +608,7 @@ def _build_app(page: ft.Page):
             project_form_state["end"] = end
 
             if not name:
-                show_snack("프로젝트 이름을 입력해 주세요.", "#D14343")
+                show_snack("프로젝트 이름을 입력해 주세요.", ERROR_RED)
                 page.update()
                 return
 
@@ -563,7 +636,7 @@ def _build_app(page: ft.Page):
             filled=True,
             bgcolor=SURFACE_SOFT,
             border_color="transparent",
-            border_radius=12,
+            border_radius=16,
         )
         group_dropdown.on_change = update_group
 
@@ -574,7 +647,7 @@ def _build_app(page: ft.Page):
             filled=True,
             bgcolor=SURFACE_SOFT,
             border_color="transparent",
-            border_radius=12,
+            border_radius=16,
         )
 
         description_input = ft.TextField(
@@ -587,7 +660,7 @@ def _build_app(page: ft.Page):
             filled=True,
             bgcolor=SURFACE_SOFT,
             border_color="transparent",
-            border_radius=12,
+            border_radius=16,
         )
 
         start_input = ft.TextField(
@@ -597,7 +670,7 @@ def _build_app(page: ft.Page):
             filled=True,
             bgcolor=SURFACE_SOFT,
             border_color="transparent",
-            border_radius=12,
+            border_radius=16,
         )
 
         end_input = ft.TextField(
@@ -607,7 +680,7 @@ def _build_app(page: ft.Page):
             filled=True,
             bgcolor=SURFACE_SOFT,
             border_color="transparent",
-            border_radius=12,
+            border_radius=16,
         )
 
         preview_name = project_form_state.get("name") or "(project name)"
@@ -619,9 +692,9 @@ def _build_app(page: ft.Page):
                 [
                     ft.Row(
                         [
-                            ft.IconButton(ft.Icons.ARROW_BACK, icon_color=TEXT_PRIMARY, on_click=lambda e: jump_to(0)),
-                            ft.Text("Add Project", size=22, weight=ft.FontWeight.BOLD),
-                            ft.Icon(ft.Icons.NOTIFICATIONS_NONE, color=TEXT_SECONDARY),
+                            ft.IconButton(icon_arrow_back, icon_color=TEXT_PRIMARY, on_click=lambda e: jump_to(0)),
+                            ft.Text("Add Project", size=TYPE_HEADLINE_SMALL, weight=ft.FontWeight.BOLD),
+                            ft.Icon(icon_notifications, color=TEXT_SECONDARY),
                         ],
                         alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                     ),
@@ -631,27 +704,27 @@ def _build_app(page: ft.Page):
                                 group_dropdown,
                                 name_input,
                                 description_input,
-                                ft.Row([start_input, end_input], spacing=10),
+                                ft.Row([start_input, end_input], spacing=12),
                             ],
-                            spacing=10,
+                            spacing=12,
                         )
                     ),
                     card(
                         ft.Column(
                             [
-                                ft.Text("Preview", size=12, color=TEXT_SECONDARY),
-                                ft.Text(preview_name, size=18, weight=ft.FontWeight.BOLD),
-                                ft.Text(preview_group, size=13, color=PRIMARY_PURPLE),
+                                ft.Text("Preview", size=TYPE_BODY_SMALL, color=TEXT_SECONDARY),
+                                ft.Text(preview_name, size=TYPE_TITLE_MEDIUM, weight=ft.FontWeight.BOLD),
+                                ft.Text(preview_group, size=TYPE_BODY_MEDIUM, color=PRIMARY_PURPLE),
                             ],
-                            spacing=4,
+                            spacing=6,
                         ),
-                        bgcolor="#FFFFFF",
+                        bgcolor=SURFACE,
                     ),
-                    primary_button("Add Project", submit_project, icon=ft.Icons.ADD),
+                    primary_button("Add Project", submit_project, icon=icon_add),
                 ],
                 expand=True,
                 scroll=ft.ScrollMode.AUTO,
-                spacing=14,
+                spacing=16,
             )
         )
 
@@ -672,11 +745,11 @@ def _build_app(page: ft.Page):
 
         header_cells = [
             ft.Container(
-                content=ft.Text("교시", size=11, color=TEXT_SECONDARY, text_align=ft.TextAlign.CENTER),
+                content=ft.Text("교시", size=TYPE_LABEL_MEDIUM, color=TEXT_SECONDARY, text_align=ft.TextAlign.CENTER),
                 width=left_col_width,
                 height=header_height,
                 alignment=ft.Alignment(0, 0),
-                bgcolor="#F0F2FA",
+                bgcolor=SURFACE_SOFT,
                 border=ft.border.all(1, BORDER),
             )
         ]
@@ -684,11 +757,11 @@ def _build_app(page: ft.Page):
         for day in timetable_days:
             header_cells.append(
                 ft.Container(
-                    content=ft.Text(day, size=12, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER),
+                    content=ft.Text(day, size=TYPE_BODY_SMALL, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER),
                     expand=True,
                     height=header_height,
                     alignment=ft.Alignment(0, 0),
-                    bgcolor="#F0F2FA",
+                    bgcolor=SURFACE_SOFT,
                     border=ft.border.all(1, BORDER),
                 )
             )
@@ -697,11 +770,11 @@ def _build_app(page: ft.Page):
 
         for period in timetable_periods:
             left_cell = ft.Container(
-                content=ft.Text(format_period_label(period), size=10, color=TEXT_SECONDARY, text_align=ft.TextAlign.CENTER),
+                content=ft.Text(format_period_label(period), size=TYPE_LABEL_SMALL, color=TEXT_SECONDARY, text_align=ft.TextAlign.CENTER),
                 width=left_col_width,
                 height=row_height,
                 alignment=ft.Alignment(0, 0),
-                bgcolor="#FAFBFF",
+                bgcolor=SURFACE_MUTED,
                 border=ft.border.all(1, BORDER),
             )
 
@@ -716,7 +789,7 @@ def _build_app(page: ft.Page):
                     cell_text = subject if show_text else ""
                     content = ft.Text(
                         cell_text,
-                        size=10,
+                        size=TYPE_LABEL_SMALL,
                         color=text_color,
                         weight=ft.FontWeight.W_600,
                         max_lines=2,
@@ -725,7 +798,7 @@ def _build_app(page: ft.Page):
                     )
                 else:
                     bg_color = SURFACE
-                    content = ft.Text("", size=10)
+                    content = ft.Text("", size=TYPE_LABEL_SMALL)
 
                 day_cells.append(
                     ft.Container(
@@ -780,7 +853,7 @@ def _build_app(page: ft.Page):
         def add_timetable_entry_ui(e):
             subject = (subject_input.value or "").strip()
             if not subject:
-                show_snack("과목명을 입력해 주세요.", "#D14343")
+                show_snack("과목명을 입력해 주세요.", ERROR_RED)
                 page.update()
                 return
 
@@ -788,12 +861,12 @@ def _build_app(page: ft.Page):
                 start_period = int(start_dropdown.value)
                 end_period = int(end_dropdown.value)
             except (TypeError, ValueError):
-                show_snack("교시를 다시 선택해 주세요.", "#D14343")
+                show_snack("교시를 다시 선택해 주세요.", ERROR_RED)
                 page.update()
                 return
 
             if start_period > end_period:
-                show_snack("시작 교시는 종료 교시보다 클 수 없습니다.", "#D14343")
+                show_snack("시작 교시는 종료 교시보다 클 수 없습니다.", ERROR_RED)
                 page.update()
                 return
 
@@ -805,7 +878,7 @@ def _build_app(page: ft.Page):
             try:
                 db.add_timetable_entry(subject, day, start_period, end_period, selected_color)
             except ValueError as exc:
-                show_snack(str(exc), "#D14343")
+                show_snack(str(exc), ERROR_RED)
                 page.update()
                 return
 
@@ -830,14 +903,14 @@ def _build_app(page: ft.Page):
                     content=ft.Row(
                         [
                             ft.Container(width=12, height=12, bgcolor=color, border_radius=3),
-                            ft.Text(subject_name, size=11, color=TEXT_PRIMARY),
+                            ft.Text(subject_name, size=TYPE_LABEL_MEDIUM, color=TEXT_PRIMARY),
                         ],
                         spacing=6,
                     ),
                     padding=ft.Padding(8, 6, 8, 6),
                     bgcolor=SURFACE,
                     border=ft.border.all(1, BORDER),
-                    border_radius=10,
+                    border_radius=999,
                 )
             )
 
@@ -855,11 +928,11 @@ def _build_app(page: ft.Page):
                     ft.Row(
                         [
                             ft.Container(width=12, height=12, bgcolor=color, border_radius=2),
-                            ft.Text(f"{subject} | {day} {start_period}~{end_period}교시", expand=True, size=12),
+                            ft.Text(f"{subject} | {day} {start_period}~{end_period}교시", expand=True, size=TYPE_BODY_SMALL),
                             ft.IconButton(
-                                ft.Icons.DELETE_OUTLINE,
+                                icon_delete,
                                 icon_size=18,
-                                icon_color="#B84D4D",
+                                icon_color=ERROR_RED,
                                 on_click=lambda e, entry_id=entry.get("id"): delete_timetable_entry_ui(e, entry_id),
                             ),
                         ],
@@ -878,8 +951,8 @@ def _build_app(page: ft.Page):
                 [
                     ft.Row(
                         [
-                            ft.Text("시간표", size=24, weight=ft.FontWeight.BOLD),
-                            ft.Text("0교시는 시간 없음", color=TEXT_SECONDARY, size=11),
+                            ft.Text("시간표", size=TYPE_HEADLINE_MEDIUM, weight=ft.FontWeight.BOLD),
+                            ft.Text("0교시는 시간 없음", color=TEXT_SECONDARY, size=TYPE_LABEL_MEDIUM),
                         ],
                         alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                     ),
@@ -891,14 +964,14 @@ def _build_app(page: ft.Page):
                                 start_dropdown,
                                 end_dropdown,
                                 color_dropdown,
-                                primary_button("추가", add_timetable_entry_ui, icon=ft.Icons.ADD),
+                                primary_button("추가", add_timetable_entry_ui, icon=icon_add),
                             ],
                             wrap=True,
-                            spacing=8,
+                            spacing=12,
                         ),
-                        padding=10,
+                        padding=12,
                     ),
-                    ft.Row(legend, wrap=True, spacing=8) if legend else ft.Text("과목 색상 정보가 없습니다.", color=TEXT_SECONDARY),
+                    ft.Row(legend, wrap=True, spacing=12) if legend else ft.Text("과목 색상 정보가 없습니다.", color=TEXT_SECONDARY),
                     card(
                         ft.Column(
                             [timetable_grid],
@@ -907,12 +980,12 @@ def _build_app(page: ft.Page):
                         ),
                         padding=0,
                     ),
-                    ft.Text("등록된 과목", size=16, weight=ft.FontWeight.BOLD),
-                    ft.Column(entry_rows, spacing=8),
+                    ft.Text("등록된 과목", size=TYPE_TITLE_SMALL, weight=ft.FontWeight.BOLD),
+                    ft.Column(entry_rows, spacing=12),
                 ],
                 expand=True,
                 scroll=ft.ScrollMode.AUTO,
-                spacing=12,
+                spacing=16,
             )
         )
 
@@ -935,8 +1008,8 @@ def _build_app(page: ft.Page):
                         [
                             ft.Row(
                                 [
-                                    ft.Text(label, size=16, weight=ft.FontWeight.BOLD),
-                                    ft.Text(f"{int(value * 100)}%", size=15, color=color, weight=ft.FontWeight.BOLD),
+                                    ft.Text(label, size=TYPE_TITLE_SMALL, weight=ft.FontWeight.BOLD),
+                                    ft.Text(f"{int(value * 100)}%", size=TYPE_TITLE_LARGE, color=color, weight=ft.FontWeight.BOLD),
                                 ],
                                 alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                             ),
@@ -951,8 +1024,8 @@ def _build_app(page: ft.Page):
             card(
                 ft.Row(
                     [
-                        ft.Column([ft.Text("TimeTable Entries", color=TEXT_SECONDARY), ft.Text(str(len(db.get_timetable_entries())), size=24, weight=ft.FontWeight.BOLD)]),
-                        ft.Column([ft.Text("Task Count", color=TEXT_SECONDARY), ft.Text(str(len(_today_tasks())), size=24, weight=ft.FontWeight.BOLD)]),
+                        ft.Column([ft.Text("TimeTable Entries", color=TEXT_SECONDARY), ft.Text(str(len(db.get_timetable_entries())), size=TYPE_HEADLINE_MEDIUM, weight=ft.FontWeight.BOLD)]),
+                        ft.Column([ft.Text("Task Count", color=TEXT_SECONDARY), ft.Text(str(len(_today_tasks())), size=TYPE_HEADLINE_MEDIUM, weight=ft.FontWeight.BOLD)]),
                     ],
                     alignment=ft.MainAxisAlignment.SPACE_AROUND,
                 )
@@ -963,12 +1036,12 @@ def _build_app(page: ft.Page):
         page_content.controls.append(
             ft.Column(
                 [
-                    ft.Text("Stats", size=24, weight=ft.FontWeight.BOLD),
+                    ft.Text("Stats", size=TYPE_HEADLINE_MEDIUM, weight=ft.FontWeight.BOLD),
                     ft.Column(rows, spacing=12),
                 ],
                 expand=True,
                 scroll=ft.ScrollMode.AUTO,
-                spacing=12,
+                spacing=16,
             )
         )
 
@@ -1004,14 +1077,14 @@ def _build_app(page: ft.Page):
         page.navigation_bar = ft.NavigationBar(
             selected_index=0,
             on_change=on_nav_change,
-            bgcolor="#FFFFFF",
-            indicator_color="#EDE9FF",
+            bgcolor=SURFACE,
+            indicator_color=PRIMARY_PURPLE_DARK,
             destinations=[
-                ft.NavigationBarDestination(icon=ft.Icons.HOME, label="Home"),
-                ft.NavigationBarDestination(icon=ft.Icons.TODAY, label="Today"),
-                ft.NavigationBarDestination(icon=ft.Icons.ADD_CIRCLE, label="Add"),
-                ft.NavigationBarDestination(icon=ft.Icons.TABLE_CHART, label="시간표"),
-                ft.NavigationBarDestination(icon=ft.Icons.DASHBOARD, label="Stats"),
+                ft.NavigationBarDestination(icon=m3_icon("HOME_ROUNDED", ft.Icons.HOME), label="Home"),
+                ft.NavigationBarDestination(icon=m3_icon("TODAY_ROUNDED", ft.Icons.TODAY), label="Today"),
+                ft.NavigationBarDestination(icon=m3_icon("ADD_CIRCLE_ROUNDED", ft.Icons.ADD_CIRCLE), label="Add"),
+                ft.NavigationBarDestination(icon=m3_icon("TABLE_CHART_ROUNDED", ft.Icons.TABLE_CHART), label="시간표"),
+                ft.NavigationBarDestination(icon=m3_icon("DASHBOARD_ROUNDED", ft.Icons.DASHBOARD), label="Stats"),
             ],
         )
         foreground = ft.Container(
@@ -1026,13 +1099,13 @@ def _build_app(page: ft.Page):
             min_width=84,
             min_extended_width=130,
             on_change=on_nav_change,
-            bgcolor="#FFFFFF",
+            bgcolor=SURFACE,
             destinations=[
-                ft.NavigationRailDestination(icon=ft.Icons.HOME, label="Home"),
-                ft.NavigationRailDestination(icon=ft.Icons.TODAY, label="Today"),
-                ft.NavigationRailDestination(icon=ft.Icons.ADD_CIRCLE, label="Add"),
-                ft.NavigationRailDestination(icon=ft.Icons.TABLE_CHART, label="시간표"),
-                ft.NavigationRailDestination(icon=ft.Icons.DASHBOARD, label="Stats"),
+                ft.NavigationRailDestination(icon=m3_icon("HOME_ROUNDED", ft.Icons.HOME), label="Home"),
+                ft.NavigationRailDestination(icon=m3_icon("TODAY_ROUNDED", ft.Icons.TODAY), label="Today"),
+                ft.NavigationRailDestination(icon=m3_icon("ADD_CIRCLE_ROUNDED", ft.Icons.ADD_CIRCLE), label="Add"),
+                ft.NavigationRailDestination(icon=m3_icon("TABLE_CHART_ROUNDED", ft.Icons.TABLE_CHART), label="시간표"),
+                ft.NavigationRailDestination(icon=m3_icon("DASHBOARD_ROUNDED", ft.Icons.DASHBOARD), label="Stats"),
             ],
         )
         foreground = ft.Row(
@@ -1050,7 +1123,7 @@ def _build_app(page: ft.Page):
                 ft.Container(
                     expand=True,
                     gradient=ft.LinearGradient(
-                        colors=["#F8F8FF", "#F2F4FB"],
+                        colors=[SURFACE, SURFACE_SOFT],
                         begin=ft.Alignment(-1, -1),
                         end=ft.Alignment(1, 1),
                     ),
@@ -1072,10 +1145,10 @@ def main(page: ft.Page):
         try:
             page.clean()
             page.padding = 16
-            page.bgcolor = "#FFFFFF"
+            page.bgcolor = SURFACE
             page.add(
-                ft.Text("앱 시작 오류", color="#D14343", size=22, weight=ft.FontWeight.BOLD),
-                ft.Text(error_text, color="#4A4A4A", selectable=True, size=12),
+                ft.Text("앱 시작 오류", color=ERROR_RED, size=TYPE_HEADLINE_SMALL, weight=ft.FontWeight.BOLD),
+                ft.Text(error_text, color=TEXT_SECONDARY, selectable=True, size=TYPE_BODY_SMALL),
             )
             page.update()
         except Exception:
